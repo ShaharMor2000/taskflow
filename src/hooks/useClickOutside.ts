@@ -6,7 +6,12 @@ export function useClickOutside(ref: RefObject<HTMLElement>, onOutside: () => vo
     const handler = (e: PointerEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onOutside();
     };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onOutside();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // Mark the key as handled so outer listeners (e.g. selection) don't also react.
+      e.preventDefault();
+      onOutside();
+    };
     document.addEventListener('pointerdown', handler);
     document.addEventListener('keydown', onKey);
     return () => {

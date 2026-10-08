@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Check, NotebookPen, Repeat } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
@@ -16,7 +17,9 @@ import {
   X,
   CircleDot,
 } from 'lucide-react';
-import type { Priority, Task, TaskStatus } from '../../types';
+import type { Priority, RecurrenceFrequency, Task, TaskStatus } from '../../types';
+import { RECURRENCE_OPTIONS, describeRecurrence } from '../../lib/recurrence';
+import { toISODate } from '../../lib/date';
 import { formatDateTime, formatDueLabel, relativeTime } from '../../lib/date';
 import { PRIORITIES, PRIORITY_META, STATUSES, STATUS_META, isOverdue, subtaskProgress } from '../../lib/tasks';
 import { cn, percent } from '../../lib/utils';
@@ -50,7 +53,7 @@ export function TaskDetailPanel() {
 
 function DetailBody({ task }: { task: Task }) {
   const { now, closeTaskDetail, openTaskForm, navigate } = useUI();
-  const { projects, activity, updateTask, setStatus, toggleSubtask, addSubtask, removeSubtask } = useData();
+  const { projects, activity, updateTask, setStatus, toggleSubtask, addSubtask, removeSubtask, updateNotes } = useData();
   const actions = useTaskActions();
   const [draft, setDraft] = useState('');
   const project = projects.find((p) => p.id === task.projectId);
@@ -169,6 +172,25 @@ function DetailBody({ task }: { task: Task }) {
               {task.category ?? 'None'}
             </span>
           </Property>
+          <Property icon={Repeat} label="Repeat">
+            <div className="flex flex-wrap items-center gap-2">
+              <InlineSelect
+                label="Repeat"
+                value={task.recurrence?.frequency ?? ''}
+                onChange={(v) =>
+                  updateTask(task.id, {
+                    recurrence: v ? { frequency: v as RecurrenceFrequency, interval: task.recurrence?.interval ?? 1 } : null,
+                    // A repeating task needs an anchor date.
+                    ...(v && !task.dueDate ? { dueDate: toISODate(now) } : {}),
+                  })
+                }
+                options={[{ value: '', label: 'Does not repeat' }, ...RECURRENCE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))]}
+              />
+              {task.recurrence && task.recurrence.interval > 1 && task.recurrence.frequency !== 'weekdays' && (
+                <span className="text-xs text-slate-500">{describeRecurrence(task.recurrence)}</span>
+              )}
+            </div>
+          </Property>
           <Property icon={Tags} label="Tags">
             {task.tags.length ? (
               <div className="flex flex-wrap gap-1.5 px-2">
@@ -192,6 +214,8 @@ function DetailBody({ task }: { task: Task }) {
             </button>
           )}
         </section>
+
+        <NotesEditor key={task.id} initial={task.notes} onSave={(notes) => updateNotes(task.id, notes)} />
 
         <section className="mt-8">
           <div className="mb-3 flex items-center justify-between">
@@ -320,5 +344,59 @@ function InlineSelect({ label, value, onChange, options, dot }: InlineSelectProp
         ))}
       </select>
     </div>
+  );
+}
+
+/** Inline notes editor that autosaves shortly after typing stops and on blur. */
+function NotesEditor({ initial, onSave }: { initial: string; onSave: (notes: string) => void }) {
+  const [value, setValue] = useState(initial);
+  const [state, setState] = useState<'idle' | 'dirty' | 'saved'>('idle');
+  const timer = useRef<number>();
+  const latest = useRef(value);
+  latest.current = value;
+
+  const save = () => {
+    window.clearTimeout(timer.current);
+    if (latest.current === initial) return;
+    onSave(latest.current);
+    setState('saved');
+  };
+
+  // Flush pending edits if the panel closes mid-typing.
+  useEffect(() => () => {
+    window.clearTimeout(timer.current);
+    if (latest.current !== initial) onSave(latest.current);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <section className="mt-8">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          <NotebookPen className="h-4 w-4" /> Notes
+        </h3>
+        <span className="text-[11px] text-slate-400" aria-live="polite">
+          {state === 'dirty' ? 'Editing…' : state === 'saved' ? (
+            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <Check className="h-3 w-3" /> Saved
+            </span>
+          ) : null}
+        </span>
+      </div>
+      <textarea
+        value={value}
+        maxLength={10000}
+        rows={Math.min(10, Math.max(3, value.split('\n').length + 1))}
+        aria-label="Task notes"
+        placeholder="Jot down progress, links or decisions…"
+        onChange={(e) => {
+          setValue(e.target.value);
+          setState('dirty');
+          window.clearTimeout(timer.current);
+          timer.current = window.setTimeout(save, 700);
+        }}
+        onBlur={save}
+        className="w-full resize-none rounded-xl border border-transparent bg-amber-50/50 px-3 py-2.5 text-sm leading-relaxed text-slate-700 outline-none transition placeholder:text-slate-400 hover:border-amber-200/70 focus:border-amber-300 focus:bg-amber-50/80 dark:bg-amber-400/[0.04] dark:text-slate-300 dark:hover:border-amber-300/20 dark:focus:border-amber-300/30"
+      />
+    </section>
   );
 }

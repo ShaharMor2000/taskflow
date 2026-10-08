@@ -9,6 +9,8 @@ import { cn } from '../lib/utils';
 import { PageHeader } from '../components/layout/PageHeader';
 import { TaskToolbar, ViewSwitcher } from '../components/tasks/TaskToolbar';
 import { TaskRow } from '../components/tasks/TaskRow';
+import { BulkActionBar } from '../components/tasks/BulkActionBar';
+import { SelectAllBar } from '../components/tasks/SelectAllBar';
 import { EmptyState } from '../components/ui/EmptyState';
 
 const GROUP_ORDER: DueGroup[] = ['overdue', 'today', 'tomorrow', 'week', 'later', 'none'];
@@ -76,6 +78,7 @@ export function TasksPage() {
           />
         ) : (
           <div className="p-2 sm:p-3">
+            <SelectAllBar ids={(completedExpanded ? filtered : open).map((t) => t.id)} />
             {groups.map((group) =>
               group.tasks.length === 0 ? null : (
                 <section key={group.key} className="mb-2">
@@ -91,7 +94,7 @@ export function TasksPage() {
                   <div className="divide-y divide-slate-100/80 dark:divide-white/[0.04]">
                     <AnimatePresence initial={false} mode="popLayout">
                       {group.tasks.map((t) => (
-                        <TaskRow key={t.id} task={t} project={projectOf(t)} />
+                        <TaskRow key={t.id} task={t} project={projectOf(t)} selectable />
                       ))}
                     </AnimatePresence>
                   </div>
@@ -124,7 +127,7 @@ export function TasksPage() {
                       <div className="divide-y divide-slate-100/80 dark:divide-white/[0.04]">
                         <AnimatePresence initial={false} mode="popLayout">
                           {done.map((t) => (
-                            <TaskRow key={t.id} task={t} project={projectOf(t)} />
+                            <TaskRow key={t.id} task={t} project={projectOf(t)} selectable />
                           ))}
                         </AnimatePresence>
                       </div>
@@ -136,6 +139,7 @@ export function TasksPage() {
           </div>
         )}
       </div>
+      <BulkActionBar />
     </>
   );
 }

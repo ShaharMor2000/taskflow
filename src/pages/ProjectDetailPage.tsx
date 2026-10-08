@@ -8,6 +8,8 @@ import { formatShortDate } from '../lib/date';
 import { sortTasks } from '../lib/tasks';
 import { PageHeader } from '../components/layout/PageHeader';
 import { TaskRow } from '../components/tasks/TaskRow';
+import { BulkActionBar } from '../components/tasks/BulkActionBar';
+import { SelectAllBar } from '../components/tasks/SelectAllBar';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ProgressRing } from '../components/ui/Progress';
 import { Segmented } from '../components/ui/Controls';
@@ -131,15 +133,19 @@ export function ProjectDetailPage({ id }: { id: string }) {
             }
           />
         ) : (
-          <div className="divide-y divide-slate-100/80 p-2 sm:p-3 dark:divide-white/[0.04]">
+          <div className="p-2 sm:p-3">
+            <SelectAllBar ids={shown.map((t) => t.id)} />
+            <div className="divide-y divide-slate-100/80 dark:divide-white/[0.04]">
             <AnimatePresence initial={false} mode="popLayout">
               {shown.map((t) => (
-                <TaskRow key={t.id} task={t} project={project} showProject={false} />
+                <TaskRow key={t.id} task={t} project={project} showProject={false} selectable />
               ))}
             </AnimatePresence>
+            </div>
           </div>
         )}
       </section>
+      <BulkActionBar />
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState, type DragEvent } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { CalendarPlus, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { CalendarPlus, ChevronLeft, ChevronRight, Plus, Repeat } from 'lucide-react';
 import type { Task } from '../types';
 import { useData } from '../store/DataContext';
 import { useUI } from '../store/UIContext';
@@ -269,6 +269,7 @@ function CalendarPill({ task, overdue }: { task: Task; overdue: boolean }) {
     >
       {task.dueTime && <span className="shrink-0 text-[10.5px] opacity-70">{formatTime(task.dueTime)}</span>}
       <span className="truncate">{task.title}</span>
+      {task.recurrence && <Repeat className="ml-auto h-3 w-3 shrink-0 opacity-60" aria-label="Repeats" />}
     </button>
   );
 }

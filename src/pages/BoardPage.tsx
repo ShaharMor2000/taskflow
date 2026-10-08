@@ -1,6 +1,7 @@
 import { forwardRef, useMemo, useState, type DragEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CalendarDays, ChevronLeft, ChevronRight, ListChecks, Plus } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, ListChecks, Plus, Repeat } from 'lucide-react';
+import { describeRecurrence } from '../lib/recurrence';
 import type { Project, Task, TaskStatus } from '../types';
 import { useData } from '../store/DataContext';
 import { useUI } from '../store/UIContext';
@@ -234,6 +235,7 @@ const BoardCard = forwardRef<HTMLDivElement, BoardCardProps>(function BoardCard(
           {project ? <ProjectLabel project={project} className="max-w-[60%]" /> : <span />}
           {task.dueDate && (
             <span className={cn('inline-flex shrink-0 items-center gap-1', overdue && 'font-medium text-rose-600 dark:text-rose-400')}>
+              {task.recurrence && <Repeat className="h-3.5 w-3.5 text-violet-500" aria-label={describeRecurrence(task.recurrence)} />}
               <CalendarDays className="h-3.5 w-3.5" />
               {formatDueLabel(task.dueDate, task.dueTime, now)}
             </span>

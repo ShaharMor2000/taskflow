@@ -15,10 +15,12 @@ interface MenuProps {
   trigger: (props: { onClick: (e: React.MouseEvent) => void; 'aria-expanded': boolean; 'aria-haspopup': 'menu' }) => ReactNode;
   items: MenuItem[];
   align?: 'left' | 'right';
+  /** Open upward, e.g. from a toolbar pinned to the bottom of the screen. */
+  placement?: 'bottom' | 'top';
 }
 
 /** Small dropdown menu for contextual actions (edit, delete, …). */
-export function Menu({ trigger, items, align = 'right' }: MenuProps) {
+export function Menu({ trigger, items, align = 'right', placement = 'bottom' }: MenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -38,12 +40,13 @@ export function Menu({ trigger, items, align = 'right' }: MenuProps) {
         {open && (
           <motion.div
             role="menu"
-            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            initial={{ opacity: 0, scale: 0.95, y: placement === 'top' ? 4 : -4 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -4, transition: { duration: 0.1 } }}
+            exit={{ opacity: 0, scale: 0.95, y: placement === 'top' ? 4 : -4, transition: { duration: 0.1 } }}
             transition={{ duration: 0.14 }}
             className={cn(
-              'absolute z-30 mt-1 min-w-[170px] origin-top-right rounded-xl border border-slate-200/80 bg-white p-1 shadow-pop dark:border-white/10 dark:bg-ink-800',
+              'absolute z-30 max-h-72 min-w-[170px] overflow-y-auto rounded-xl border border-slate-200/80 bg-white p-1 shadow-pop dark:border-white/10 dark:bg-ink-800',
+              placement === 'top' ? 'bottom-full mb-2 origin-bottom' : 'mt-1 origin-top-right',
               align === 'right' ? 'right-0' : 'left-0',
             )}
             onClick={(e) => e.stopPropagation()}

@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import { motion } from 'framer-motion';
-import { AlignLeft, CalendarDays, Copy, ListChecks, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { AlignLeft, CalendarDays, Copy, ListChecks, MoreHorizontal, NotebookPen, Pencil, Repeat, Trash2 } from 'lucide-react';
+import { describeRecurrence } from '../../lib/recurrence';
 import type { Project, Task } from '../../types';
 import { formatDueLabel } from '../../lib/date';
 import { PRIORITY_META, isOverdue, subtaskProgress } from '../../lib/tasks';
@@ -17,10 +18,15 @@ interface TaskRowProps {
   showProject?: boolean;
   /** Narrow containers: hide secondary metadata. */
   compact?: boolean;
+  /** Show a selection checkbox for bulk actions. */
+  selectable?: boolean;
 }
 
-export const TaskRow = forwardRef<HTMLDivElement, TaskRowProps>(function TaskRow({ task, project, showProject = true, compact = false }, ref) {
-  const { now, openTaskDetail, openTaskForm } = useUI();
+export const TaskRow = forwardRef<HTMLDivElement, TaskRowProps>(function TaskRow({ task, project, showProject = true, compact = false, selectable = false }, ref) {
+  const { now, openTaskDetail, openTaskForm, selectedIds, toggleSelected } = useUI();
+  const selected = selectable && selectedIds.includes(task.id);
+  // While a selection exists, clicking a row extends it instead of opening details.
+  const selecting = selectable && selectedIds.length > 0;
   const actions = useTaskActions();
   const done = task.status === 'done';
   const overdue = isOverdue(task, now);
@@ -34,9 +40,25 @@ export const TaskRow = forwardRef<HTMLDivElement, TaskRowProps>(function TaskRow
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: -12, transition: { duration: 0.15 } }}
       transition={{ duration: 0.2 }}
-      onClick={() => openTaskDetail(task.id)}
-      className="group relative flex cursor-pointer items-start gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.03]"
+      onClick={() => (selecting ? toggleSelected(task.id) : openTaskDetail(task.id))}
+      aria-selected={selectable ? selected : undefined}
+      className={cn(
+        'group relative flex cursor-pointer items-start gap-3 rounded-xl px-3 py-3 transition-colors',
+        selected ? 'bg-violet-50/80 dark:bg-violet-500/[0.08]' : 'hover:bg-slate-50 dark:hover:bg-white/[0.03]',
+      )}
     >
+      {selectable && (
+        <div className={cn('-ml-1 pt-[3px] transition-opacity', selecting ? 'opacity-100' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100')}>
+          <input
+            type="checkbox"
+            checked={selected}
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => toggleSelected(task.id)}
+            aria-label={`Select “${task.title}”`}
+            className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-violet-600"
+          />
+        </div>
+      )}
       <div className="pt-px">
         <Checkbox
           checked={done}
@@ -50,7 +72,8 @@ export const TaskRow = forwardRef<HTMLDivElement, TaskRowProps>(function TaskRow
         <button
           onClick={(e) => {
             e.stopPropagation();
-            openTaskDetail(task.id);
+            if (selecting) toggleSelected(task.id);
+            else openTaskDetail(task.id);
           }}
           className={cn(
             'block max-w-full truncate text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50',
@@ -78,7 +101,14 @@ export const TaskRow = forwardRef<HTMLDivElement, TaskRowProps>(function TaskRow
               {subs.done}/{subs.total}
             </span>
           )}
+          {task.recurrence && (
+            <span className="inline-flex items-center gap-1 text-violet-600 dark:text-violet-300" title={describeRecurrence(task.recurrence)}>
+              <Repeat className="h-3.5 w-3.5" />
+              {!compact && <span className="hidden md:inline">{describeRecurrence(task.recurrence)}</span>}
+            </span>
+          )}
           {task.description && <AlignLeft className="h-3.5 w-3.5" aria-label="Has description" />}
+          {task.notes && <NotebookPen className="h-3.5 w-3.5" aria-label="Has notes" />}
           {showProject && !compact && project && <ProjectLabel project={project} className="max-w-[140px]" />}
           {!compact && task.category && <span className="text-slate-400 dark:text-slate-500">{task.category}</span>}
           {!compact && task.tags.slice(0, 2).map((tag) => (
