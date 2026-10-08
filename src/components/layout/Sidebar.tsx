@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   BarChart3,
@@ -7,13 +8,14 @@ import {
   LayoutDashboard,
   ListTodo,
   Plus,
+  Search,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react';
 import { useData } from '../../store/DataContext';
 import { useUI, type Route } from '../../store/UIContext';
-import { getOverview } from '../../lib/stats';
 import { cn } from '../../lib/utils';
+import { isSameDay } from '../../lib/date';
 import { ProgressBar } from '../ui/Progress';
 
 interface NavItem {
@@ -35,7 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
 export function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="grid h-8 w-8 place-items-center rounded-[10px] bg-gradient-to-br from-violet-500 to-violet-700 shadow-glow">
+      <div className="grid h-8 w-8 place-items-center rounded-[10px] bg-violet-600 shadow-sm shadow-violet-600/30">
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
           <path d="M5 12.5l4.5 4.5L19 7.5" />
         </svg>
@@ -47,9 +49,22 @@ export function Logo() {
 
 export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 'mobile' }) {
   const { tasks, projects, settings } = useData();
-  const { route, navigate, now, openTaskForm, openProjectForm } = useUI();
-  const openCount = tasks.filter((t) => t.status !== 'done').length;
-  const overview = getOverview(tasks, now, settings.dailyGoal);
+  const { route, navigate, now, openTaskForm, openProjectForm, setPaletteOpen } = useUI();
+  const { openCount, openByProject, completedToday } = useMemo(() => {
+    const byProject = new Map<string, number>();
+    let open = 0;
+    let doneToday = 0;
+    for (const t of tasks) {
+      if (t.status !== 'done') {
+        open++;
+        if (t.projectId) byProject.set(t.projectId, (byProject.get(t.projectId) ?? 0) + 1);
+      } else if (t.completedAt && isSameDay(new Date(t.completedAt), now)) {
+        doneToday++;
+      }
+    }
+    return { openCount: open, openByProject: byProject, completedToday: doneToday };
+  }, [tasks, now]);
+  const goalProgress = Math.min(100, (completedToday / Math.max(1, settings.dailyGoal)) * 100);
   const initials = settings.userName
     .split(/\s+/)
     .map((w) => w[0])
@@ -68,10 +83,21 @@ export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 
       </div>
 
       <div className="px-3 pb-2">
-        <button onClick={() => openTaskForm()} className="btn-primary h-10 w-full justify-start shadow-glow">
+        <button onClick={() => openTaskForm()} className="btn-primary h-9 w-full justify-start">
           <Plus className="h-4 w-4" />
           New task
           <kbd className="ml-auto rounded-md bg-white/20 px-1.5 text-[11px] font-semibold">N</kbd>
+        </button>
+        <button
+          onClick={() => setPaletteOpen(true)}
+          className="mt-1.5 flex h-9 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.04] dark:hover:text-slate-100"
+        >
+          <Search className="h-[18px] w-[18px]" />
+          Search
+          <span className="ml-auto flex gap-0.5">
+            <kbd className="kbd">Ctrl</kbd>
+            <kbd className="kbd">K</kbd>
+          </span>
         </button>
       </div>
 
@@ -125,7 +151,7 @@ export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 
             <ul className="space-y-0.5">
               {projects.map((p) => {
                 const active = route.name === 'project' && route.id === p.id;
-                const open = tasks.filter((t) => t.projectId === p.id && t.status !== 'done').length;
+                const open = openByProject.get(p.id) ?? 0;
                 return (
                   <li key={p.id}>
                     <button
@@ -151,14 +177,14 @@ export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 
       </nav>
 
       <div className="space-y-3 border-t border-slate-200/70 p-3 dark:border-white/[0.06]">
-        <div className="rounded-xl bg-gradient-to-br from-violet-50 to-white p-3 ring-1 ring-violet-100 dark:from-violet-500/10 dark:to-transparent dark:ring-violet-400/10">
+        <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200/70 dark:bg-white/[0.03] dark:ring-white/[0.06]">
           <div className="mb-2 flex items-center justify-between text-xs">
             <span className="font-medium text-slate-700 dark:text-slate-200">Daily goal</span>
             <span className="font-semibold text-violet-700 dark:text-violet-300">
-              {overview.completedToday}/{settings.dailyGoal}
+              {completedToday}/{settings.dailyGoal}
             </span>
           </div>
-          <ProgressBar value={overview.goalProgress} label="Daily goal progress" />
+          <ProgressBar value={goalProgress} label="Daily goal progress" />
         </div>
         <button
           onClick={() => navigate({ name: 'settings' })}
@@ -168,7 +194,7 @@ export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 
             route.name === 'settings' && 'bg-slate-100 dark:bg-white/[0.06]',
           )}
         >
-          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-violet-400 to-fuchsia-500 text-xs font-bold text-white">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-bold text-violet-700 dark:bg-violet-500/20 dark:text-violet-200">
             {initials || '?'}
           </span>
           <span className="min-w-0 flex-1">

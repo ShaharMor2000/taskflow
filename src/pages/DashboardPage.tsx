@@ -1,35 +1,39 @@
-import { useMemo } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   Activity as ActivityIcon,
   AlertTriangle,
   ArrowRight,
   CalendarClock,
+  CalendarDays,
   CheckCircle2,
   CircleCheckBig,
-  Clock3,
+  CornerDownLeft,
   FolderPlus,
-  ListTodo,
   Pencil,
   Plus,
   RotateCcw,
   Sparkles,
+  Target,
   Trash2,
-  Zap,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react';
-import type { ActivityType } from '../types';
+import type { ActivityType, Task } from '../types';
 import { useData } from '../store/DataContext';
 import { useUI } from '../store/UIContext';
-import { dailySeries, getOverview, projectStats } from '../lib/stats';
+import { currentWeekSeries, getOverview, productivityTrend, projectStats, weekComparison } from '../lib/stats';
 import { addDays, diffInDays, formatDueLabel, formatLongDate, greeting, parseISODate, relativeTime, toISODate } from '../lib/date';
 import { PRIORITY_META, dueDateTime, isDueOn, isOverdue, sortTasks } from '../lib/tasks';
-import { cn, percent } from '../lib/utils';
+import { cn, pluralize } from '../lib/utils';
+import { useTaskActions } from '../hooks/useTaskActions';
 import { StatCard } from '../components/ui/StatCard';
 import { ProgressBar, ProgressRing } from '../components/ui/Progress';
 import { EmptyState } from '../components/ui/EmptyState';
-import { CardHeader, ChartTooltip, Legend, axisProps, chartTheme } from '../components/ui/ChartKit';
+import { CardHeader, ChartTooltip, axisProps, chartTheme } from '../components/ui/ChartKit';
 import { TaskRow } from '../components/tasks/TaskRow';
+import { useToast } from '../components/ui/Toast';
 
 const ACTIVITY_ICONS: Record<ActivityType, { icon: typeof Plus; className: string }> = {
   task_created: { icon: Plus, className: 'bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300' },
@@ -43,21 +47,29 @@ const ACTIVITY_ICONS: Record<ActivityType, { icon: typeof Plus; className: strin
   project_deleted: { icon: Trash2, className: 'bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300' },
 };
 
+const PRIORITY_LIMIT = 6;
+
 export function DashboardPage() {
   const { tasks, projects, activity, settings } = useData();
-  const { now, isDark, navigate, openTaskForm, openTaskDetail, setFilters, resetFilters } = useUI();
+  const { now, isDark, navigate, openTaskDetail, setFilters, resetFilters } = useUI();
+  const actions = useTaskActions();
   const theme = chartTheme(isDark);
 
   const overview = useMemo(() => getOverview(tasks, now, settings.dailyGoal), [tasks, now, settings.dailyGoal]);
-  const week = useMemo(() => dailySeries(tasks, now, 7), [tasks, now]);
-  const weekTotal = week.reduce((s, d) => s + d.completed, 0);
+  const week = useMemo(() => currentWeekSeries(tasks, now, settings.weekStartsOn), [tasks, now, settings.weekStartsOn]);
+  const weekVs = useMemo(() => weekComparison(tasks, now, settings.weekStartsOn), [tasks, now, settings.weekStartsOn]);
+  const trend = useMemo(() => productivityTrend(tasks, now, 14), [tasks, now]);
 
-  const todays = useMemo(
-    () =>
-      sortTasks(
-        tasks.filter((t) => isDueOn(t, now)),
-        { key: 'dueDate', reversed: false },
-      ).sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done')),
+  const overdue = useMemo(() => sortTasks(tasks.filter((t) => isOverdue(t, now)), { key: 'priority', reversed: false }), [tasks, now]);
+  const dueTodayOpen = useMemo(() => tasks.filter((t) => t.status !== 'done' && isDueOn(t, now) && !isOverdue(t, now)), [tasks, now]);
+
+  // Today's priorities: everything overdue or due today, most important first.
+  const priorities = useMemo(
+    () => sortTasks([...overdue, ...dueTodayOpen], { key: 'priority', reversed: false }),
+    [overdue, dueTodayOpen],
+  );
+  const completedToday = useMemo(
+    () => tasks.filter((t) => t.completedAt && diffInDays(new Date(t.completedAt), now) === 0),
     [tasks, now],
   );
 
@@ -66,66 +78,92 @@ export function DashboardPage() {
     return sortTasks(
       tasks.filter((t) => {
         const due = dueDateTime(t);
-        return t.status !== 'done' && due !== null && due > now && !isDueOn(t, now) && due <= horizon;
+        return t.status !== 'done' && due !== null && !isDueOn(t, now) && due > now && due <= horizon;
       }),
       { key: 'dueDate', reversed: false },
     ).slice(0, 5);
   }, [tasks, now]);
 
-  const overdueList = useMemo(() => tasks.filter((t) => isOverdue(t, now)), [tasks, now]);
-
-  const showTasksWith = (status: 'all' | 'done' | 'in_progress' | 'overdue') => {
+  const showTasks = (status: 'all' | 'open' | 'done' | 'in_progress' | 'overdue') => {
     resetFilters();
     setFilters({ status });
     navigate({ name: 'tasks' });
   };
 
+  const projectOf = (t: Task) => projects.find((p) => p.id === t.projectId);
+  const openCount = overview.total - overview.completed;
+
   return (
     <div className="space-y-6">
-      <motion.section
-        initial={{ opacity: 0, y: 10 }}
+      <motion.header
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-violet-600 via-violet-600 to-indigo-600 p-6 text-white shadow-glow sm:p-8"
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"
       >
-        <div className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-24 right-40 h-56 w-56 rounded-full bg-fuchsia-400/20 blur-3xl" />
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-violet-100">{formatLongDate(now)}</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
-              {greeting(now)}, {settings.userName}
-            </h1>
-            <p className="mt-2 max-w-lg text-sm text-violet-100">
-              {overview.todayTotal === 0
-                ? 'Nothing is due today. A great moment to plan ahead or tackle something new.'
-                : `You have ${overview.todayTotal - overview.todayDone} of ${overview.todayTotal} tasks left for today${
-                    overview.overdue ? ` and ${overview.overdue} overdue` : ''
-                  }.`}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => openTaskForm()} className="btn h-10 bg-white px-4 text-violet-700 shadow-sm hover:bg-violet-50">
-              <Plus className="h-4 w-4" /> Quick add
-            </button>
-            <button onClick={() => navigate({ name: 'tasks' })} className="btn h-10 bg-white/15 px-4 text-white ring-1 ring-white/25 hover:bg-white/25">
-              View tasks
-            </button>
-          </div>
+        <div>
+          <p className="flex items-center gap-2 text-[13px] font-medium text-slate-500 dark:text-slate-400">
+            <CalendarDays className="h-4 w-4" /> {formatLongDate(now)}
+          </p>
+          <h1 className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px] dark:text-white">
+            {greeting(now)}, {settings.userName}
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {priorities.length === 0
+              ? 'Nothing urgent on your plate today. A good moment to plan ahead.'
+              : `${pluralize(priorities.length, 'priority', 'priorities')} today${overdue.length ? `, including ${overdue.length} overdue` : ''}. ${
+                  completedToday.length ? `${completedToday.length} done so far.` : "Let's get started."
+                }`}
+          </p>
         </div>
-      </motion.section>
+        <QuickAdd />
+      </motion.header>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard index={0} label="Total tasks" value={overview.total} icon={ListTodo} tone="violet" hint={`${overview.todo} to do`} onClick={() => showTasksWith('all')} />
-        <StatCard index={1} label="Completed" value={overview.completed} icon={CircleCheckBig} tone="emerald" hint={`${overview.completionRate}% completion rate`} onClick={() => showTasksWith('done')} />
-        <StatCard index={2} label="In progress" value={overview.inProgress} icon={Clock3} tone="amber" hint="Actively being worked on" onClick={() => showTasksWith('in_progress')} />
         <StatCard
-          index={3}
+          index={0}
+          label="Completed today"
+          value={
+            <span>
+              {overview.completedToday}
+              <span className="ml-1 text-base font-semibold text-slate-400">/ {settings.dailyGoal}</span>
+            </span>
+          }
+          icon={CircleCheckBig}
+          tone="emerald"
+          hint={<ProgressBar value={overview.goalProgress} color="#10b981" label="Daily goal progress" />}
+        />
+        <StatCard
+          index={1}
+          label="Due today"
+          value={dueTodayOpen.length}
+          icon={Target}
+          tone="violet"
+          hint={`${pluralize(openCount, 'open task')} in total`}
+          onClick={() => showTasks('open')}
+        />
+        <StatCard
+          index={2}
           label="Overdue"
-          value={overview.overdue}
+          value={overdue.length}
           icon={AlertTriangle}
           tone="rose"
-          hint={overview.overdue ? 'Needs your attention' : 'Nothing overdue'}
-          onClick={() => showTasksWith('overdue')}
+          hint={overdue.length ? 'Needs your attention' : 'You are all caught up'}
+          onClick={() => showTasks('overdue')}
+        />
+        <StatCard
+          index={3}
+          label="Done this week"
+          value={weekVs.thisWeek}
+          icon={weekVs.change >= 0 ? TrendingUp : TrendingDown}
+          tone="sky"
+          hint={
+            <span className={weekVs.change >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>
+              {weekVs.change >= 0 ? '+' : ''}
+              {weekVs.change}% vs last week
+            </span>
+          }
+          onClick={() => navigate({ name: 'analytics' })}
         />
       </div>
 
@@ -133,88 +171,215 @@ export function DashboardPage() {
         <div className="space-y-6 xl:col-span-2">
           <section className="card p-5 sm:p-6">
             <CardHeader
-              title="Weekly completion"
-              subtitle={`${weekTotal} tasks completed in the last 7 days`}
-              action={<Legend items={[{ label: 'Completed', color: theme.primary }, { label: 'Created', color: theme.secondary }]} />}
-            />
-            <div className="h-60" role="img" aria-label={`Bar chart of tasks completed and created over the last 7 days. ${week.map((d) => `${d.label}: ${d.completed} completed`).join(', ')}`}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={week} barGap={2} barCategoryGap="28%">
-                  <CartesianGrid vertical={false} stroke={theme.grid} />
-                  <XAxis dataKey="label" {...axisProps(isDark)} />
-                  <YAxis allowDecimals={false} width={28} {...axisProps(isDark)} />
-                  <Tooltip cursor={{ fill: theme.cursor, radius: 8 }} content={<ChartTooltip labelKey="fullLabel" />} />
-                  <Bar dataKey="completed" name="Completed" fill={theme.primary} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                  <Bar dataKey="created" name="Created" fill={theme.secondary} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
-
-          <section className="card p-5 sm:p-6">
-            <CardHeader
-              title="Today's tasks"
-              subtitle={overview.todayTotal ? `${overview.todayDone} of ${overview.todayTotal} done` : 'Tasks due today appear here'}
+              title="Today's priorities"
+              subtitle="Overdue and due-today tasks, most important first"
               action={
-                <button className="btn-ghost btn-sm" onClick={() => openTaskForm({ defaults: { dueDate: toISODate(now) } })}>
-                  <Plus className="h-4 w-4" /> Add
-                </button>
+                priorities.length > PRIORITY_LIMIT ? (
+                  <button className="btn-ghost btn-sm" onClick={() => showTasks('open')}>
+                    View all {priorities.length} <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                ) : undefined
               }
             />
-            {todays.length === 0 ? (
+            {priorities.length === 0 ? (
               <EmptyState
                 compact
                 icon={Sparkles}
-                title="Your day is clear"
-                description="No tasks are due today. Add one or pull something forward from upcoming."
-                action={
-                  <button className="btn-primary btn-sm" onClick={() => openTaskForm({ defaults: { dueDate: toISODate(now) } })}>
-                    <Plus className="h-4 w-4" /> Add task for today
-                  </button>
+                title={completedToday.length ? 'Today’s list is done' : 'Your day is clear'}
+                description={
+                  completedToday.length
+                    ? `You completed ${pluralize(completedToday.length, 'task')} today. Pull something forward from upcoming?`
+                    : 'Nothing is due today. Use Quick add above to plan something.'
                 }
               />
             ) : (
               <div className="-mx-3 divide-y divide-slate-100 dark:divide-white/[0.05]">
-                <AnimatePresence initial={false}>
-                  {todays.map((t) => (
-                    <TaskRow key={t.id} task={t} project={projects.find((p) => p.id === t.projectId)} />
+                <AnimatePresence initial={false} mode="popLayout">
+                  {priorities.slice(0, PRIORITY_LIMIT).map((t) => (
+                    <TaskRow key={t.id} task={t} project={projectOf(t)} />
                   ))}
                 </AnimatePresence>
               </div>
             )}
+            {completedToday.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 text-xs text-slate-500 dark:border-white/[0.06]">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                <span className="font-medium text-slate-700 dark:text-slate-300">Completed today:</span>
+                {completedToday.slice(0, 4).map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => openTaskDetail(t.id)}
+                    className="max-w-[180px] truncate rounded-md bg-slate-100 px-2 py-0.5 text-slate-500 line-through hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10"
+                  >
+                    {t.title}
+                  </button>
+                ))}
+                {completedToday.length > 4 && <span>+{completedToday.length - 4} more</span>}
+              </div>
+            )}
           </section>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <section className="card p-5 sm:p-6">
+              <CardHeader title="This week" subtitle={`${weekVs.thisWeek} completed · ${week.reduce((s, d) => s + d.due, 0)} due`} />
+              <div className="h-48" role="img" aria-label={`Tasks completed each day this week: ${week.map((d) => `${d.label} ${d.completed}`).join(', ')}`}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={week} barCategoryGap="30%">
+                    <CartesianGrid vertical={false} stroke={theme.grid} />
+                    <XAxis dataKey="label" {...axisProps(isDark)} />
+                    <YAxis allowDecimals={false} width={24} {...axisProps(isDark)} />
+                    <Tooltip cursor={{ fill: theme.cursor, radius: 6 }} content={<ChartTooltip labelKey="fullLabel" />} />
+                    <Bar dataKey="completed" name="Completed" radius={[4, 4, 0, 0]} maxBarSize={28}>
+                      {week.map((d) => (
+                        <Cell key={d.label} fill={theme.primary} fillOpacity={d.isToday ? 1 : d.isFuture ? 0.2 : 0.55} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+
+            <section className="card p-5 sm:p-6">
+              <CardHeader
+                title="Productivity trend"
+                subtitle={`${trend.recent} completed in the last 14 days`}
+                action={
+                  <span
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold',
+                      trend.change >= 0
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                        : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300',
+                    )}
+                    title={`${trend.previous} in the 14 days before`}
+                  >
+                    {trend.change >= 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+                    {trend.change >= 0 ? '+' : ''}
+                    {trend.change}%
+                  </span>
+                }
+              />
+              <div className="h-48" role="img" aria-label={`Completions per day over the last 14 days, ${trend.change}% change versus the previous 14 days`}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={trend.series} margin={{ top: 6, right: 4 }}>
+                    <defs>
+                      <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={theme.primary} stopOpacity={0.22} />
+                        <stop offset="100%" stopColor={theme.primary} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid vertical={false} stroke={theme.grid} />
+                    <XAxis dataKey="label" {...axisProps(isDark)} interval="preserveStartEnd" minTickGap={28} />
+                    <YAxis allowDecimals={false} width={24} {...axisProps(isDark)} />
+                    <Tooltip cursor={{ stroke: theme.axis, strokeDasharray: '3 3' }} content={<ChartTooltip labelKey="fullLabel" />} />
+                    <Area
+                      type="monotone"
+                      dataKey="completed"
+                      name="Completed"
+                      stroke={theme.primary}
+                      strokeWidth={2}
+                      fill="url(#trendFill)"
+                      activeDot={{ r: 4, strokeWidth: 2, stroke: theme.surface }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </section>
+          </div>
+
+          {projects.length > 0 && (
+            <section className="card p-5 sm:p-6">
+              <CardHeader
+                title="Project progress"
+                action={
+                  <button className="btn-ghost btn-sm" onClick={() => navigate({ name: 'projects' })}>
+                    All projects <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                }
+              />
+              <ul className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                {projects.slice(0, 6).map((p) => {
+                  const s = projectStats(p.id, tasks, now);
+                  return (
+                    <li key={p.id}>
+                      <button className="group w-full text-left" onClick={() => navigate({ name: 'project', id: p.id })}>
+                        <div className="mb-1.5 flex items-center justify-between gap-2 text-[13px]">
+                          <span className="flex min-w-0 items-center gap-2 font-medium text-slate-800 group-hover:text-violet-700 dark:text-slate-200 dark:group-hover:text-violet-300">
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-[4px]" style={{ backgroundColor: p.color }} />
+                            <span className="truncate">{p.name}</span>
+                          </span>
+                          <span className="shrink-0 text-xs text-slate-500">
+                            {s.completed}/{s.total}
+                            {s.overdue > 0 && <span className="ml-1.5 text-rose-600 dark:text-rose-400">· {s.overdue} overdue</span>}
+                            <span className="ml-1.5 font-semibold text-slate-900 dark:text-white">{s.progress}%</span>
+                          </span>
+                        </div>
+                        <ProgressBar value={s.progress} color={p.color} label={`${p.name} progress`} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
         </div>
 
         <div className="space-y-6">
           <section className="card p-5 sm:p-6">
-            <CardHeader title="Daily productivity" subtitle="Share of today's tasks completed" />
+            <CardHeader title="Daily focus" subtitle="Share of today's tasks completed" />
             <div className="flex items-center gap-5">
-              <ProgressRing value={overview.productivity} size={116} stroke={11} color={theme.primary} label="Daily productivity">
+              <ProgressRing value={overview.productivity} size={108} stroke={10} color={theme.primary} label="Daily productivity">
                 <div>
                   <div className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{overview.productivity}%</div>
                   <div className="text-[11px] text-slate-500">today</div>
                 </div>
               </ProgressRing>
-              <div className="min-w-0 flex-1 space-y-3 text-sm">
-                <div>
-                  <div className="mb-1.5 flex justify-between text-xs">
-                    <span className="text-slate-500 dark:text-slate-400">Daily goal</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">
-                      {overview.completedToday}/{settings.dailyGoal}
-                    </span>
-                  </div>
-                  <ProgressBar value={overview.goalProgress} color="#10b981" label="Daily goal" />
-                </div>
-                <div>
-                  <div className="mb-1.5 flex justify-between text-xs">
-                    <span className="text-slate-500 dark:text-slate-400">Overall completion</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">{overview.completionRate}%</span>
-                  </div>
-                  <ProgressBar value={overview.completionRate} label="Overall completion" />
-                </div>
-              </div>
+              <dl className="min-w-0 flex-1 space-y-2.5 text-[13px]">
+                <Metric label="Today's tasks" value={`${overview.todayDone}/${overview.todayTotal}`} />
+                <Metric label="Daily goal" value={`${overview.completedToday}/${settings.dailyGoal}`} />
+                <Metric label="In progress" value={overview.inProgress} />
+                <Metric label="Completion rate" value={`${overview.completionRate}%`} />
+              </dl>
             </div>
           </section>
+
+          {overdue.length > 0 && (
+            <section className="card border-rose-200/70 p-5 sm:p-6 dark:border-rose-500/20">
+              <CardHeader
+                title="Overdue"
+                subtitle={pluralize(overdue.length, 'task') + ' past due'}
+                action={
+                  <button
+                    className="btn-secondary btn-sm"
+                    onClick={() => actions.bulkUpdate(overdue.map((t) => t.id), { dueDate: toISODate(now), dueTime: null }, 'moved to today')}
+                  >
+                    Move all to today
+                  </button>
+                }
+              />
+              <ul className="space-y-1">
+                {overdue.slice(0, 4).map((t) => (
+                  <li key={t.id}>
+                    <button
+                      onClick={() => openTaskDetail(t.id)}
+                      className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-rose-50/60 dark:hover:bg-rose-500/[0.06]"
+                    >
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: PRIORITY_META[t.priority].color }} />
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-800 dark:text-slate-200">{t.title}</span>
+                      <span className="shrink-0 text-xs font-medium text-rose-600 dark:text-rose-400">
+                        {formatDueLabel(t.dueDate!, t.dueTime, now)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {overdue.length > 4 && (
+                <button className="mt-2 px-2 text-xs font-medium text-rose-600 hover:underline dark:text-rose-400" onClick={() => showTasks('overdue')}>
+                  View all {overdue.length} overdue
+                </button>
+              )}
+            </section>
+          )}
 
           <section className="card p-5 sm:p-6">
             <CardHeader
@@ -226,45 +391,38 @@ export function DashboardPage() {
                 </button>
               }
             />
-            {overdueList.length > 0 && (
-              <button
-                onClick={() => showTasksWith('overdue')}
-                className="mb-3 flex w-full items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-left text-[13px] font-medium text-rose-700 transition hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/15"
-              >
-                <AlertTriangle className="h-4 w-4" />
-                {overdueList.length} overdue {overdueList.length === 1 ? 'task' : 'tasks'}
-                <ArrowRight className="ml-auto h-3.5 w-3.5" />
-              </button>
-            )}
             {upcoming.length === 0 ? (
               <EmptyState compact icon={CalendarClock} title="No upcoming deadlines" description="Tasks due in the next week will show up here." />
             ) : (
               <ul className="space-y-1">
                 {upcoming.map((t) => {
-                  const project = projects.find((p) => p.id === t.projectId);
-                  const days = diffInDays(parseISODate(t.dueDate!), now);
+                  const project = projectOf(t);
+                  const due = parseISODate(t.dueDate!);
+                  const days = diffInDays(due, now);
                   return (
                     <li key={t.id}>
                       <button
                         onClick={() => openTaskDetail(t.id)}
                         className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-white/[0.03]"
                       >
-                        <span className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl bg-slate-50 ring-1 ring-slate-100 dark:bg-white/[0.04] dark:ring-white/[0.06]">
-                          <span className="text-[10px] font-semibold uppercase text-slate-400">
-                            {parseISODate(t.dueDate!).toLocaleDateString(undefined, { month: 'short' })}
+                        <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-slate-50 ring-1 ring-slate-100 dark:bg-white/[0.04] dark:ring-white/[0.06]">
+                          <span className="text-[9px] font-semibold uppercase leading-none text-slate-400">
+                            {due.toLocaleDateString(undefined, { month: 'short' })}
                           </span>
-                          <span className="text-sm font-bold leading-none text-slate-900 dark:text-white">{parseISODate(t.dueDate!).getDate()}</span>
+                          <span className="mt-0.5 text-sm font-bold leading-none text-slate-900 dark:text-white">{due.getDate()}</span>
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">{t.title}</span>
-                          <span className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: PRIORITY_META[t.priority].color }} />
-                            {formatDueLabel(t.dueDate!, t.dueTime, now)}
-                            {project && <span className="truncate">· {project.name}</span>}
+                          <span className="block truncate text-[13px] font-medium text-slate-900 dark:text-slate-100">{t.title}</span>
+                          <span className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: PRIORITY_META[t.priority].color }} />
+                            <span className="truncate">
+                              {formatDueLabel(t.dueDate!, t.dueTime, now)}
+                              {project && ` · ${project.name}`}
+                            </span>
                           </span>
                         </span>
                         <span className={cn('shrink-0 text-xs font-medium', days <= 1 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400')}>
-                          {days === 1 ? '1 day' : `${days} days`}
+                          {days === 1 ? 'in 1 day' : `in ${days} days`}
                         </span>
                       </button>
                     </li>
@@ -274,47 +432,13 @@ export function DashboardPage() {
             )}
           </section>
 
-          {projects.length > 0 && (
-            <section className="card p-5 sm:p-6">
-              <CardHeader
-                title="Project progress"
-                action={
-                  <button className="btn-ghost btn-sm" onClick={() => navigate({ name: 'projects' })}>
-                    All <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                }
-              />
-              <ul className="space-y-4">
-                {projects.slice(0, 4).map((p) => {
-                  const s = projectStats(p.id, tasks, now);
-                  return (
-                    <li key={p.id}>
-                      <button className="w-full text-left" onClick={() => navigate({ name: 'project', id: p.id })}>
-                        <div className="mb-1.5 flex items-center justify-between gap-2 text-[13px]">
-                          <span className="flex min-w-0 items-center gap-2 font-medium text-slate-800 dark:text-slate-200">
-                            <span className="h-2.5 w-2.5 shrink-0 rounded-[4px]" style={{ backgroundColor: p.color }} />
-                            <span className="truncate">{p.name}</span>
-                          </span>
-                          <span className="shrink-0 text-xs text-slate-500">
-                            {s.completed}/{s.total} · <span className="font-semibold text-slate-900 dark:text-white">{s.progress}%</span>
-                          </span>
-                        </div>
-                        <ProgressBar value={s.progress} color={p.color} label={`${p.name} progress`} />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          )}
-
           <section className="card p-5 sm:p-6">
             <CardHeader title="Recent activity" />
             {activity.length === 0 ? (
               <EmptyState compact icon={ActivityIcon} title="No activity yet" description="Your changes will be tracked here." />
             ) : (
               <ol className="space-y-3">
-                {activity.slice(0, 7).map((a) => {
+                {activity.slice(0, 6).map((a) => {
                   const meta = ACTIVITY_ICONS[a.type] ?? ACTIVITY_ICONS.task_updated;
                   const clickable = a.taskId && tasks.some((t) => t.id === a.taskId);
                   return (
@@ -324,7 +448,10 @@ export function DashboardPage() {
                       </span>
                       <div className="min-w-0 flex-1 pt-0.5">
                         {clickable ? (
-                          <button onClick={() => openTaskDetail(a.taskId!)} className="block max-w-full truncate text-left text-[13px] text-slate-700 hover:text-violet-600 dark:text-slate-300 dark:hover:text-violet-300">
+                          <button
+                            onClick={() => openTaskDetail(a.taskId!)}
+                            className="block max-w-full truncate text-left text-[13px] text-slate-700 hover:text-violet-600 dark:text-slate-300 dark:hover:text-violet-300"
+                          >
                             {a.message}
                           </button>
                         ) : (
@@ -340,12 +467,81 @@ export function DashboardPage() {
           </section>
         </div>
       </div>
-
-      {overview.total > 0 && overview.completedToday >= settings.dailyGoal && (
-        <p className="flex items-center justify-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-          <Zap className="h-4 w-4" /> Daily goal reached — {percent(overview.completedToday, settings.dailyGoal)}% of target.
-        </p>
-      )}
     </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <dt className="text-slate-500 dark:text-slate-400">{label}</dt>
+      <dd className="font-semibold tabular-nums text-slate-900 dark:text-white">{value}</dd>
+    </div>
+  );
+}
+
+/** Inline quick-add: type a title and press Enter. Due today by default. */
+function QuickAdd() {
+  const { createTask } = useData();
+  const { now, openTaskForm } = useUI();
+  const toast = useToast();
+  const [title, setTitle] = useState('');
+  const [today, setToday] = useState(true);
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const clean = title.trim();
+    if (!clean) return;
+    createTask({
+      title: clean.slice(0, 200),
+      description: '',
+      status: 'todo',
+      priority: 'medium',
+      dueDate: today ? toISODate(now) : null,
+      dueTime: null,
+      projectId: null,
+      category: null,
+      tags: [],
+      subtasks: [],
+      notes: '',
+      recurrence: null,
+    });
+    setTitle('');
+    toast({ title: 'Task added', description: today ? `${clean} · due today` : clean });
+  };
+
+  return (
+    <form onSubmit={submit} className="card flex w-full items-center gap-2 p-1.5 pl-3 lg:max-w-md">
+      <Plus className="h-4 w-4 shrink-0 text-violet-500" />
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Quick add a task…"
+        aria-label="Quick add a task"
+        maxLength={200}
+        className="h-8 min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-white"
+      />
+      <button
+        type="button"
+        onClick={() => setToday((v) => !v)}
+        aria-pressed={today}
+        title="Toggle due today"
+        className={cn(
+          'h-7 shrink-0 rounded-lg px-2 text-xs font-medium transition',
+          today ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-200' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5',
+        )}
+      >
+        Today
+      </button>
+      {title.trim() ? (
+        <button type="submit" className="btn-primary btn-sm shrink-0" aria-label="Add task">
+          <CornerDownLeft className="h-3.5 w-3.5" />
+        </button>
+      ) : (
+        <button type="button" className="btn-ghost btn-sm shrink-0" onClick={() => openTaskForm({ defaults: today ? { dueDate: toISODate(now) } : {} })}>
+          Details
+        </button>
+      )}
+    </form>
   );
 }

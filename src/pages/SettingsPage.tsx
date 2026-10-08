@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Database, Download, Keyboard, Laptop, Moon, Palette, RotateCcw, Sun, Trash2, Upload, User } from 'lucide-react';
 import { useData } from '../store/DataContext';
 import { useUI } from '../store/UIContext';
@@ -21,6 +21,10 @@ export function SettingsPage() {
   const [name, setName] = useState(settings.userName);
   const [nameError, setNameError] = useState<string | null>(null);
   const [goal, setGoal] = useState(String(settings.dailyGoal));
+
+  // Keep the inputs in sync when settings change elsewhere (import, reset, another tab).
+  useEffect(() => setName(settings.userName), [settings.userName]);
+  useEffect(() => setGoal(String(settings.dailyGoal)), [settings.dailyGoal]);
 
   const saveName = () => {
     const clean = name.trim();

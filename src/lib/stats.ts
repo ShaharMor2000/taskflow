@@ -201,3 +201,28 @@ export function formatDuration(hours: number): string {
   if (hours < 48) return `${Math.round(hours)}h`;
   return `${(hours / 24).toFixed(1)}d`;
 }
+
+/** The current calendar week (respecting the week start), with future days flagged. */
+export function currentWeekSeries(tasks: Task[], now: Date, weekStartsOn: 0 | 1) {
+  const start = startOfWeek(now, weekStartsOn);
+  return Array.from({ length: 7 }, (_, i) => {
+    const day = addDays(start, i);
+    return {
+      label: day.toLocaleDateString(undefined, { weekday: 'short' }),
+      fullLabel: day.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }),
+      isToday: isSameDay(day, now),
+      isFuture: day > now && !isSameDay(day, now),
+      completed: tasks.filter((t) => completedOn(t, day)).length,
+      due: tasks.filter((t) => isDueOn(t, day)).length,
+    };
+  });
+}
+
+/** Completions in the last `days` days compared with the `days` before that. */
+export function productivityTrend(tasks: Task[], now: Date, days: number) {
+  const series = dailySeries(tasks, now, days * 2);
+  const previous = series.slice(0, days).reduce((s, d) => s + d.completed, 0);
+  const recent = series.slice(days).reduce((s, d) => s + d.completed, 0);
+  const change = previous === 0 ? (recent > 0 ? 100 : 0) : Math.round(((recent - previous) / previous) * 100);
+  return { series: series.slice(days), recent, previous, change };
+}

@@ -35,9 +35,9 @@ export function StatCard({ label, value, icon: Icon, tone, hint, onClick, index 
           'transition hover:-translate-y-0.5 hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 dark:hover:border-white/[0.12]',
       )}
     >
-      <div className="flex items-center justify-between">
-        <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400">{label}</span>
-        <span className={cn('grid h-9 w-9 place-items-center rounded-xl transition-transform group-hover:scale-105', TONES[tone])}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="min-w-0 pt-1 text-[13px] font-medium leading-snug text-slate-500 dark:text-slate-400">{label}</span>
+        <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl transition-transform group-hover:scale-105', TONES[tone])}>
           <Icon className="h-[18px] w-[18px]" />
         </span>
       </div>

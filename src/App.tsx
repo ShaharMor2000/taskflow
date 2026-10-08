@@ -1,3 +1,4 @@
+import { Suspense, lazy, type ComponentType } from 'react';
 import { MotionConfig } from 'framer-motion';
 import { DataProvider } from './store/DataContext';
 import { UIProvider, useUI } from './store/UIContext';
@@ -10,14 +11,20 @@ import { ProjectFormModal } from './components/projects/ProjectFormModal';
 import { CommandPalette } from './components/overlays/CommandPalette';
 import { ShortcutsDialog } from './components/overlays/ShortcutsDialog';
 import { useDeadlineNotifications, useKeyboardShortcuts } from './hooks/useGlobalEffects';
-import { DashboardPage } from './pages/DashboardPage';
-import { TasksPage } from './pages/TasksPage';
-import { BoardPage } from './pages/BoardPage';
-import { CalendarPage } from './pages/CalendarPage';
-import { ProjectsPage } from './pages/ProjectsPage';
-import { ProjectDetailPage } from './pages/ProjectDetailPage';
-import { AnalyticsPage } from './pages/AnalyticsPage';
-import { SettingsPage } from './pages/SettingsPage';
+import { PageSkeleton } from './components/ui/Skeleton';
+
+// Pages are split into separate chunks so the first load only fetches what is on screen
+// (the charting library in particular is only downloaded when a chart page opens).
+const named = <K extends string>(load: () => Promise<Record<K, ComponentType<any>>>, key: K) =>
+  lazy(() => load().then((m) => ({ default: m[key] })));
+const DashboardPage = named(() => import('./pages/DashboardPage'), 'DashboardPage');
+const TasksPage = named(() => import('./pages/TasksPage'), 'TasksPage');
+const BoardPage = named(() => import('./pages/BoardPage'), 'BoardPage');
+const CalendarPage = named(() => import('./pages/CalendarPage'), 'CalendarPage');
+const ProjectsPage = named(() => import('./pages/ProjectsPage'), 'ProjectsPage');
+const ProjectDetailPage = named(() => import('./pages/ProjectDetailPage'), 'ProjectDetailPage');
+const AnalyticsPage = named(() => import('./pages/AnalyticsPage'), 'AnalyticsPage');
+const SettingsPage = named(() => import('./pages/SettingsPage'), 'SettingsPage');
 
 function CurrentPage() {
   const { route } = useUI();
@@ -49,7 +56,9 @@ function Shell() {
   return (
     <>
       <AppLayout pageKey={route.name === 'project' ? `project-${route.id}` : route.name}>
-        <CurrentPage />
+        <Suspense fallback={<PageSkeleton />}>
+          <CurrentPage />
+        </Suspense>
       </AppLayout>
       <TaskDetailPanel />
       <TaskFormModal />

@@ -11,6 +11,15 @@ npm run build      # type-check + production build into dist/
 npm run preview    # serve the production build
 ```
 
+## Highlights
+
+- **Dashboard** — today's priorities, completed today vs. daily goal, overdue (with "move all to today"), upcoming deadlines, this-week chart, 14-day productivity trend, project progress, recent activity and inline quick add.
+- **Tasks** — priorities, due date & time, projects, categories, tags, subtasks, notes (autosaved), and **recurring tasks** (daily, weekdays, weekly, monthly, yearly, every N units). Completing a recurring task schedules the next occurrence.
+- **Bulk actions** — select tasks in the list or a project to complete, change status/priority/project/due date, or delete them together, with undo.
+- **Views** — list (grouped by due date), Kanban board with drag and drop, month/week calendar with drag-to-reschedule.
+- **Projects, analytics, command palette (Ctrl K), notifications, light/dark/system theme, JSON export/import.**
+- Pages are code-split and show skeletons while loading; data saved by older versions is migrated automatically.
+
 ## Project structure
 
 ```
