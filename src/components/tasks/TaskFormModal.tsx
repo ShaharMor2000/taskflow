@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import { CalendarDays, Clock, Plus, Trash2, X } from 'lucide-react';
-import type { Priority, Project, TaskInput } from '../../types';
+import { CalendarDays, Clock, Plus, Repeat, Trash2, X } from 'lucide-react';
+import type { Priority, Project, RecurrenceFrequency, TaskInput } from '../../types';
+import { MAX_INTERVAL, RECURRENCE_OPTIONS, describeRecurrence } from '../../lib/recurrence';
 import { addDays, isValidISODate, isValidTime, toISODate } from '../../lib/date';
 import { PRIORITIES, PRIORITY_META, STATUSES, STATUS_META, getCategories, getTags } from '../../lib/tasks';
 import { cn, uid } from '../../lib/utils';
@@ -22,12 +23,14 @@ const EMPTY: TaskInput = {
   category: null,
   tags: [],
   subtasks: [],
+  notes: '',
+  recurrence: null,
 };
 
-const LIMITS = { title: 200, description: 5000, category: 40, tag: 30, tags: 10, subtasks: 50 };
+const LIMITS = { title: 200, description: 5000, notes: 10000, category: 40, tag: 30, tags: 10, subtasks: 50 };
 const FORM_ID = 'task-form';
 
-type Errors = Partial<Record<'title' | 'description' | 'dueDate' | 'dueTime' | 'category' | 'tags', string>>;
+type Errors = Partial<Record<'title' | 'description' | 'notes' | 'dueDate' | 'dueTime' | 'category' | 'tags', string>>;
 
 export function TaskFormModal() {
   const { taskForm, closeTaskForm } = useUI();
@@ -47,6 +50,8 @@ export function TaskFormModal() {
         category: editing.category,
         tags: editing.tags,
         subtasks: editing.subtasks,
+        notes: editing.notes,
+        recurrence: editing.recurrence,
       }
     : { ...EMPTY, ...(taskForm.open ? taskForm.defaults : {}) };
 
@@ -147,6 +152,7 @@ function TaskForm({ initial, projects, categories, knownTags, onSubmit }: TaskFo
     if (!v.title.trim()) e.title = 'Give your task a title.';
     else if (v.title.trim().length > LIMITS.title) e.title = `Title must be under ${LIMITS.title} characters.`;
     if (v.description.length > LIMITS.description) e.description = `Description must be under ${LIMITS.description} characters.`;
+    if (v.notes.length > LIMITS.notes) e.notes = `Notes must be under ${LIMITS.notes} characters.`;
     if (v.dueDate && !isValidISODate(v.dueDate)) e.dueDate = 'Enter a valid date.';
     if (v.dueTime && !isValidTime(v.dueTime)) e.dueTime = 'Enter a valid time.';
     if (v.dueTime && !v.dueDate) e.dueTime = 'Pick a due date before setting a time.';
@@ -165,7 +171,10 @@ function TaskForm({ initial, projects, categories, knownTags, onSubmit }: TaskFo
       subtasks: subtasks.filter((s) => s.title.trim()),
       title: values.title.trim(),
       description: values.description.trim(),
+      notes: values.notes.trim(),
       category: values.category?.trim() || null,
+      // A repeating task needs an anchor date; start the series today if none was picked.
+      dueDate: values.dueDate ?? (values.recurrence ? toISODate(today) : null),
       dueTime: values.dueDate ? values.dueTime : null,
     };
     const found = validate(candidate);
@@ -342,6 +351,58 @@ function TaskForm({ initial, projects, categories, knownTags, onSubmit }: TaskFo
         <FieldError message={errors.dueDate ?? errors.dueTime} />
       </div>
 
+      <div>
+        <label htmlFor="task-repeat" className="label">
+          Repeat
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-52">
+            <Repeat className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Select
+              id="task-repeat"
+              className="[&_select]:pl-9"
+              value={values.recurrence?.frequency ?? 'none'}
+              onChange={(e) => {
+                const freq = e.target.value as RecurrenceFrequency | 'none';
+                set('recurrence', freq === 'none' ? null : { frequency: freq, interval: values.recurrence?.interval ?? 1 });
+              }}
+            >
+              <option value="none">Does not repeat</option>
+              {RECURRENCE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {values.recurrence && values.recurrence.frequency !== 'weekdays' && (
+            <label className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300">
+              every
+              <input
+                type="number"
+                min={1}
+                max={MAX_INTERVAL}
+                aria-label="Repeat interval"
+                className="input h-9 w-20"
+                value={values.recurrence.interval}
+                onChange={(e) => {
+                  const n = Math.min(MAX_INTERVAL, Math.max(1, Math.floor(Number(e.target.value) || 1)));
+                  set('recurrence', { ...values.recurrence!, interval: n });
+                }}
+              />
+              {RECURRENCE_OPTIONS.find((o) => o.value === values.recurrence!.frequency)!.unit}
+              {values.recurrence.interval === 1 ? '' : 's'}
+            </label>
+          )}
+        </div>
+        {values.recurrence && (
+          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+            {describeRecurrence(values.recurrence)}. Completing it schedules the next one automatically
+            {values.dueDate ? '.' : ', starting today.'}
+          </p>
+        )}
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="task-category" className="label">
@@ -467,6 +528,22 @@ function TaskForm({ initial, projects, categories, knownTags, onSubmit }: TaskFo
             <Plus className="h-4 w-4" /> Add
           </button>
         </div>
+      </div>
+
+      <div>
+        <label htmlFor="task-notes" className="label">
+          Notes <span className="font-normal text-slate-400">(optional)</span>
+        </label>
+        <textarea
+          id="task-notes"
+          name="notes"
+          rows={3}
+          className={cn('input h-auto resize-y py-2.5 leading-relaxed', errors.notes && 'input-error')}
+          placeholder="Working notes, links, decisions…"
+          value={values.notes}
+          onChange={(e) => set('notes', e.target.value)}
+        />
+        <FieldError message={errors.notes} />
       </div>
     </form>
   );

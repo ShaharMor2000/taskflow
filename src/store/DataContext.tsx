@@ -14,6 +14,8 @@ import type {
 import { createEmptyData, createSampleData } from '../lib/sampleData';
 import { loadData, saveData } from '../lib/storage';
 import { STATUS_META } from '../lib/tasks';
+import { nextOccurrence } from '../lib/recurrence';
+import { formatShortDate, parseISODate } from '../lib/date';
 import { uid } from '../lib/utils';
 
 type Action =
@@ -86,9 +88,17 @@ function withStatusBookkeeping(task: Task, patch: Partial<Task>, now: string): P
 export interface DataApi extends AppData {
   storageError: boolean;
   createTask: (input: TaskInput) => Task;
-  updateTask: (id: string, patch: Partial<TaskInput>) => void;
-  setStatus: (id: string, status: TaskStatus) => void;
-  toggleComplete: (id: string) => void;
+  /** Returns the next occurrence when completing a recurring task. */
+  updateTask: (id: string, patch: Partial<TaskInput>) => Task | undefined;
+  setStatus: (id: string, status: TaskStatus) => Task | undefined;
+  toggleComplete: (id: string) => Task | undefined;
+  /** Saves notes without adding an activity entry for every edit. */
+  updateNotes: (id: string, notes: string) => void;
+  /** Removes a task silently (used to undo an auto-created recurrence). */
+  discardTask: (id: string) => void;
+  bulkUpdate: (ids: string[], patch: Partial<TaskInput>) => Task[];
+  bulkDelete: (ids: string[]) => Task[];
+  restoreTasks: (tasks: Task[]) => void;
   deleteTask: (id: string) => Task | undefined;
   restoreTask: (task: Task) => void;
   duplicateTask: (id: string) => Task | undefined;
@@ -157,8 +167,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const task = findTask(id);
       if (!task) return;
       const now = new Date().toISOString();
-      dispatch({ type: 'task/update', id, patch: withStatusBookkeeping(task, patch, now) });
-      const title = patch.title ?? task.title;
+      const merged = { ...task, ...patch };
+      const completingRecurring = patch.status === 'done' && task.status !== 'done' && merged.recurrence !== null;
+      // The series moves on to the new occurrence, so the completed copy stops repeating.
+      const finalPatch = completingRecurring ? { ...patch, recurrence: null } : patch;
+      dispatch({ type: 'task/update', id, patch: withStatusBookkeeping(task, finalPatch, now) });
+      const title = merged.title;
+      let spawned: Task | undefined;
+      if (completingRecurring) {
+        spawned = {
+          ...merged,
+          id: uid('t_'),
+          status: 'todo',
+          dueDate: nextOccurrence(merged.dueDate, merged.recurrence!),
+          subtasks: merged.subtasks.map((st) => ({ ...st, id: uid('s_'), done: false })),
+          createdAt: now,
+          updatedAt: now,
+          completedAt: null,
+        };
+        dispatch({ type: 'task/add', task: spawned });
+      }
       if (patch.status && patch.status !== task.status) {
         if (patch.status === 'done') log('task_completed', `Completed “${title}”`, { taskId: id });
         else if (task.status === 'done') log('task_reopened', `Reopened “${title}”`, { taskId: id });
@@ -166,6 +194,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       } else {
         log('task_updated', `Updated “${title}”`, { taskId: id });
       }
+      if (spawned) {
+        log('task_created', `Scheduled next “${title}” for ${formatShortDate(parseISODate(spawned.dueDate!))}`, { taskId: spawned.id });
+      }
+      return spawned;
     },
     [log],
   );
@@ -175,9 +207,42 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const toggleComplete = useCallback(
     (id: string) => {
       const task = findTask(id);
-      if (task) updateTask(id, { status: task.status === 'done' ? 'todo' : 'done' });
+      return task ? updateTask(id, { status: task.status === 'done' ? 'todo' : 'done' }) : undefined;
     },
     [updateTask],
+  );
+
+  const updateNotes = useCallback((id: string, notes: string) => {
+    if (findTask(id)) dispatch({ type: 'task/update', id, patch: { notes: notes.slice(0, 10000), updatedAt: new Date().toISOString() } });
+  }, []);
+
+  const discardTask = useCallback((id: string) => dispatch({ type: 'task/delete', id }), []);
+
+  const bulkUpdate = useCallback(
+    (ids: string[], patch: Partial<TaskInput>) =>
+      ids.map((id) => updateTask(id, patch)).filter((t): t is Task => t !== undefined),
+    [updateTask],
+  );
+
+  const bulkDelete = useCallback(
+    (ids: string[]) => {
+      const removed = stateRef.current.tasks.filter((t) => ids.includes(t.id));
+      removed.forEach((t) => dispatch({ type: 'task/delete', id: t.id }));
+      if (removed.length) log('task_deleted', removed.length === 1 ? `Deleted “${removed[0].title}”` : `Deleted ${removed.length} tasks`);
+      return removed;
+    },
+    [log],
+  );
+
+  const restoreTasks = useCallback(
+    (list: Task[]) => {
+      const projectIds = new Set(stateRef.current.projects.map((p) => p.id));
+      list.forEach((t) =>
+        dispatch({ type: 'task/add', task: { ...t, projectId: t.projectId && projectIds.has(t.projectId) ? t.projectId : null } }),
+      );
+      if (list.length) log('task_created', list.length === 1 ? `Restored “${list[0].title}”` : `Restored ${list.length} tasks`);
+    },
+    [log],
   );
 
   const deleteTask = useCallback(
@@ -284,6 +349,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       updateTask,
       setStatus,
       toggleComplete,
+      updateNotes,
+      discardTask,
+      bulkUpdate,
+      bulkDelete,
+      restoreTasks,
       deleteTask,
       restoreTask,
       duplicateTask,
@@ -303,7 +373,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'data/replace', data: { ...createSampleData(), settings: stateRef.current.settings } }),
       clearAllData: () => dispatch({ type: 'data/replace', data: createEmptyData(stateRef.current.settings) }),
     }),
-    [state, storageError, createTask, updateTask, setStatus, toggleComplete, deleteTask, restoreTask, duplicateTask, toggleSubtask, addSubtask, removeSubtask, createProject, updateProject, deleteProject, addNotifications],
+    [state, storageError, createTask, updateTask, setStatus, toggleComplete, updateNotes, discardTask, bulkUpdate, bulkDelete, restoreTasks, deleteTask, restoreTask, duplicateTask, toggleSubtask, addSubtask, removeSubtask, createProject, updateProject, deleteProject, addNotifications],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

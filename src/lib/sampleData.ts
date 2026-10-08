@@ -1,4 +1,4 @@
-import type { Activity, AppData, Priority, Project, Settings, Task, TaskStatus } from '../types';
+import type { Activity, AppData, Priority, Project, Recurrence, Settings, Task, TaskStatus } from '../types';
 import { addDays, toISODate } from './date';
 import { uid } from './utils';
 
@@ -22,6 +22,8 @@ interface Seed {
   category?: string;
   tags?: string[];
   subtasks?: [string, boolean][];
+  notes?: string;
+  recurrence?: Recurrence;
   /** Created N days ago. */
   createdAgo: number;
   /** Completed N days ago (done tasks only). */
@@ -59,13 +61,19 @@ const SEEDS: Seed[] = [
     status: 'todo', priority: 'high', due: 4, project: 2, category: 'Marketing', tags: ['email', 'campaign'],
     subtasks: [['Draft subject lines', false], ['Design email template', false], ['Set up segments', false]], createdAgo: 2,
   },
-  { title: '30-minute morning run', status: 'todo', priority: 'medium', due: 0, time: '07:30', project: 3, category: 'Health', tags: ['habit'], createdAgo: 1 },
+  {
+    title: '30-minute morning run', status: 'todo', priority: 'medium', due: 0, time: '07:30', project: 3, category: 'Health', tags: ['habit'],
+    recurrence: { frequency: 'daily', interval: 1 }, createdAgo: 1,
+  },
   {
     title: 'Audit Core Web Vitals',
     description: 'Run Lighthouse on top 10 pages and log LCP/CLS issues in the tracker.',
     status: 'todo', priority: 'medium', due: 2, project: 0, category: 'Development', tags: ['performance'], createdAgo: 5,
   },
-  { title: 'Prepare investor update deck', status: 'todo', priority: 'high', due: -2, category: 'Work', tags: ['finance'], createdAgo: 8 },
+  {
+    title: 'Prepare investor update deck', status: 'todo', priority: 'high', due: -2, category: 'Work', tags: ['finance'],
+    recurrence: { frequency: 'monthly', interval: 1 }, notes: 'Include MRR, churn and the hiring plan.', createdAgo: 8,
+  },
   {
     title: 'Book dentist appointment', status: 'todo', priority: 'low', due: 6, project: 3, category: 'Personal', createdAgo: 3,
   },
@@ -76,7 +84,10 @@ const SEEDS: Seed[] = [
   },
   { title: 'Read "Designing Data-Intensive Applications" ch. 5', status: 'todo', priority: 'low', due: 9, project: 3, category: 'Learning', tags: ['reading'], createdAgo: 4 },
   { title: 'Partner webinar outline', status: 'todo', priority: 'medium', due: 12, project: 2, category: 'Marketing', tags: ['webinar'], createdAgo: 1 },
-  { title: 'Review pull requests', status: 'todo', priority: 'medium', due: 0, time: '11:00', category: 'Development', tags: ['code-review'], createdAgo: 0 },
+  {
+    title: 'Review pull requests', status: 'todo', priority: 'medium', due: 0, time: '11:00', category: 'Development', tags: ['code-review'],
+    recurrence: { frequency: 'weekdays', interval: 1 }, createdAgo: 0,
+  },
   { title: 'Organize team offsite agenda', status: 'todo', priority: 'low', category: 'Work', tags: ['team'], createdAgo: 2 },
   // Completed work spread across the last two weeks so charts have real history.
   { title: 'Set up design tokens in Figma', status: 'done', priority: 'high', due: -9, project: 0, category: 'Design', tags: ['design-system'], createdAgo: 14, completedAgo: 10 },
@@ -120,6 +131,8 @@ export function createSampleData(now = new Date()): AppData {
       category: s.category ?? null,
       tags: s.tags ?? [],
       subtasks: (s.subtasks ?? []).map(([title, done]) => ({ id: uid('s_'), title, done })),
+      notes: s.notes ?? '',
+      recurrence: s.recurrence ?? null,
       createdAt,
       updatedAt: completedAt && completedAt > createdAt ? completedAt : createdAt,
       completedAt,

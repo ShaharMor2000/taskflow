@@ -54,6 +54,11 @@ interface UIApi {
   setShortcutsOpen: (open: boolean) => void;
   mobileNavOpen: boolean;
   setMobileNavOpen: (open: boolean) => void;
+  /** Tasks selected for bulk actions (list view). */
+  selectedIds: string[];
+  toggleSelected: (id: string) => void;
+  setSelectedIds: (ids: string[]) => void;
+  clearSelection: () => void;
 }
 
 const UIContext = createContext<UIApi | null>(null);
@@ -81,6 +86,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const systemDark = useSystemDark();
   const isDark = settings.theme === 'dark' || (settings.theme === 'system' && systemDark);
@@ -94,6 +100,7 @@ export function UIProvider({ children }: { children: ReactNode }) {
     const onHash = () => {
       setRoute(parseHash(window.location.hash));
       setMobileNavOpen(false);
+      setSelectedIds([]);
       window.scrollTo({ top: 0 });
     };
     window.addEventListener('hashchange', onHash);
@@ -134,8 +141,12 @@ export function UIProvider({ children }: { children: ReactNode }) {
       setShortcutsOpen,
       mobileNavOpen,
       setMobileNavOpen,
+      selectedIds,
+      toggleSelected: (id) => setSelectedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])),
+      setSelectedIds,
+      clearSelection: () => setSelectedIds([]),
     }),
-    [route, navigate, now, isDark, filters, setFilters, sort, taskForm, detailTaskId, projectForm, paletteOpen, shortcutsOpen, mobileNavOpen],
+    [route, navigate, now, isDark, filters, setFilters, sort, taskForm, detailTaskId, projectForm, paletteOpen, shortcutsOpen, mobileNavOpen, selectedIds],
   );
 
   return <UIContext.Provider value={value}>{children}</UIContext.Provider>;

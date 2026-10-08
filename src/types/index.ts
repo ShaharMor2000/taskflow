@@ -1,6 +1,14 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'done';
 export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 
+export type RecurrenceFrequency = 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly';
+
+export interface Recurrence {
+  frequency: RecurrenceFrequency;
+  /** Repeat every N units (ignored for weekdays). */
+  interval: number;
+}
+
 export interface Subtask {
   id: string;
   title: string;
@@ -21,6 +29,9 @@ export interface Task {
   category: string | null;
   tags: string[];
   subtasks: Subtask[];
+  /** Free-form working notes, separate from the description. */
+  notes: string;
+  recurrence: Recurrence | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -29,7 +40,18 @@ export interface Task {
 /** Fields a user can provide when creating or editing a task. */
 export type TaskInput = Pick<
   Task,
-  'title' | 'description' | 'status' | 'priority' | 'dueDate' | 'dueTime' | 'projectId' | 'category' | 'tags' | 'subtasks'
+  | 'title'
+  | 'description'
+  | 'status'
+  | 'priority'
+  | 'dueDate'
+  | 'dueTime'
+  | 'projectId'
+  | 'category'
+  | 'tags'
+  | 'subtasks'
+  | 'notes'
+  | 'recurrence'
 >;
 
 export interface Project {

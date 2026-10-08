@@ -2,6 +2,7 @@ import type { Activity, AppData, AppNotification, Priority, Project, Settings, S
 import { isValidISODate, isValidTime } from './date';
 import { DEFAULT_SETTINGS } from './sampleData';
 import { PRIORITIES, PROJECT_COLORS, STATUSES } from './tasks';
+import { isValidRecurrence } from './recurrence';
 import { uid } from './utils';
 
 export const STORAGE_KEY = 'taskflow:data:v1';
@@ -32,6 +33,9 @@ function sanitizeTask(raw: unknown, projectIds: Set<string>, now: string): Task 
           .filter((s): s is Raw => isObj(s) && typeof s.title === 'string')
           .map((s): Subtask => ({ id: str(s.id) || uid('s_'), title: str(s.title), done: s.done === true }))
       : [],
+    // Fields added in v2 default safely for data saved by v1.
+    notes: str(raw.notes).slice(0, 10000),
+    recurrence: isValidRecurrence(raw.recurrence) ? { frequency: raw.recurrence.frequency, interval: raw.recurrence.interval } : null,
     createdAt,
     updatedAt: isoOr(raw.updatedAt, createdAt),
     completedAt: status === 'done' ? isoOr(raw.completedAt, now) : null,
