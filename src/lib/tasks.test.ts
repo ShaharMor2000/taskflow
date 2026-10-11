@@ -118,3 +118,34 @@ describe('batchTopOrders', () => {
     expect(batchTopOrders(existing, [], 1024)).toEqual([]);
   });
 });
+
+describe('batchTopOrders with mixed statuses', () => {
+  const existing = [
+    { status: 'todo' as const, order: 3072 },
+    { status: 'todo' as const, order: -512.5 },
+    { status: 'in_progress' as const, order: 4096 },
+    { status: 'done' as const, order: 0 },
+    { status: 'done' as const, order: 9999 },
+  ];
+  const statuses = ['done', 'todo', 'in_progress', 'todo', 'done', 'todo', 'in_progress', 'todo'] as const;
+
+  it('keeps each column increasing in input order, unique, and above that column’s existing tasks', () => {
+    const orders = batchTopOrders(existing, [...statuses], 1024);
+    expect(orders).toHaveLength(statuses.length);
+    for (const status of ['todo', 'in_progress', 'done'] as const) {
+      const mine = orders.filter((_, i) => statuses[i] === status);
+      const theirs = existing.filter((t) => t.status === status).map((t) => t.order);
+      for (let i = 1; i < mine.length; i++) expect(mine[i]).toBeGreaterThan(mine[i - 1]);
+      expect(new Set([...mine, ...theirs]).size).toBe(mine.length + theirs.length);
+      expect(Math.max(...mine)).toBeLessThan(Math.min(...theirs));
+      expect(mine.every(Number.isFinite)).toBe(true);
+    }
+  });
+
+  it('puts the batch above an empty column’s start and works with other step sizes', () => {
+    const orders = batchTopOrders([], ['done', 'todo', 'done'], 10);
+    expect(orders).toEqual([0, 10, 10]);
+    const big = batchTopOrders(existing, Array.from({ length: 10 }, () => 'todo' as const), 1);
+    expect(big).toEqual(Array.from({ length: 10 }, (_, i) => -513.5 - 9 + i));
+  });
+});

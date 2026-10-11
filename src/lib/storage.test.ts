@@ -78,3 +78,52 @@ describe('sanitizeData migration', () => {
     expect(sanitizeData(v1Data([v1Task('ok'), { id: 'bad', title: '   ' }, 42]))!.tasks.map((t) => t.id)).toEqual(['ok']);
   });
 });
+
+describe('stored data after the AI Planner', () => {
+  it('keeps the data version at 2 (the AI Planner adds no stored fields)', () => {
+    expect(DATA_VERSION).toBe(2);
+  });
+
+  it('loads current v2 data unchanged, including AI-planned tasks with negative board positions', () => {
+    const now = '2026-10-11T09:00:00.000Z';
+    const task = (id: string, extra: Record<string, unknown> = {}) => ({
+      ...v1Task(id),
+      notes: '',
+      recurrence: null,
+      order: 1024,
+      createdAt: now,
+      updatedAt: now,
+      ...extra,
+    });
+    const data = {
+      version: 2,
+      tasks: [
+        task('ai', {
+          projectId: 'p1',
+          tags: ['ai-plan'],
+          order: -2048,
+          dueDate: '2026-10-13',
+          description: 'Do it.\n\nEstimated time: 1h 30m\nPlanned with AI Planner (demo) from goal: "Ship"',
+          subtasks: [{ id: 's_1', title: 'Sub', done: false }],
+        }),
+        task('rec', { dueDate: '2026-10-10', recurrence: { frequency: 'weekly', interval: 1, until: null, anchorDay: null } }),
+        task('done', { status: 'done', completedAt: now, order: 0 }),
+      ],
+      projects: v1Data([]).projects,
+      activity: [{ id: 'a1', type: 'task_created', message: 'Created 1 task from AI Planner', at: now }],
+      notifications: [],
+      notificationKeys: [],
+      settings: v1Data([]).settings,
+    };
+    expect(sanitizeData(data)).toEqual(data);
+  });
+
+  it('still migrates v1 data without inventing AI fields', () => {
+    const data = sanitizeData(v1Data([v1Task('a')]))!;
+    expect(data.version).toBe(2);
+    expect(Object.keys(data.tasks[0]).sort()).toEqual(
+      ['category', 'completedAt', 'createdAt', 'description', 'dueDate', 'dueTime', 'id', 'notes', 'order', 'priority', 'projectId', 'recurrence', 'status', 'subtasks', 'tags', 'title', 'updatedAt'],
+    );
+    expect(data.tasks[0].tags).toEqual([]);
+  });
+});
