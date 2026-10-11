@@ -1,6 +1,6 @@
 import type { Priority, Project, Task } from '../types';
 import { addDays, formatShortDate, isSameDay, startOfDay, startOfWeek, toISODate } from './date';
-import { PRIORITIES, PRIORITY_META, STATUSES, STATUS_META, isDueOn, isOverdue } from './tasks';
+import { PRIORITIES, PRIORITY_META, STATUSES, STATUS_META, dueDateTime, isDueOn, isOverdue } from './tasks';
 import { percent } from './utils';
 
 const completedOn = (t: Task, day: Date) => t.completedAt !== null && isSameDay(new Date(t.completedAt), day);
@@ -225,4 +225,99 @@ export function productivityTrend(tasks: Task[], now: Date, days: number) {
   const recent = series.slice(days).reduce((s, d) => s + d.completed, 0);
   const change = previous === 0 ? (recent > 0 ? 100 : 0) : Math.round(((recent - previous) / previous) * 100);
   return { series: series.slice(days), recent, previous, change };
+}
+
+export interface RangeSummary {
+  days: number;
+  completed: number;
+  previousCompleted: number;
+  /** Percent change versus the previous period of the same length. */
+  change: number;
+  created: number;
+  /** Share of tasks completed in the range (with a due date) that were done by their deadline. */
+  onTimeRate: number | null;
+  onTimeSample: number;
+  /** Average completions per day across the range. */
+  perDay: number;
+}
+
+export function rangeSummary(tasks: Task[], now: Date, days: number): RangeSummary {
+  const end = addDays(startOfDay(now), 1);
+  const start = addDays(end, -days);
+  const prevStart = addDays(start, -days);
+  const within = (iso: string | null, from: Date, to: Date) => iso !== null && new Date(iso) >= from && new Date(iso) < to;
+  const done = tasks.filter((t) => within(t.completedAt, start, end));
+  const previousCompleted = tasks.filter((t) => within(t.completedAt, prevStart, start)).length;
+  const withDue = done.filter((t) => t.dueDate);
+  const onTime = withDue.filter((t) => new Date(t.completedAt!) <= dueDateTime(t)!).length;
+  return {
+    days,
+    completed: done.length,
+    previousCompleted,
+    change: previousCompleted === 0 ? (done.length > 0 ? 100 : 0) : Math.round(((done.length - previousCompleted) / previousCompleted) * 100),
+    created: tasks.filter((t) => within(t.createdAt, start, end)).length,
+    onTimeRate: withDue.length ? percent(onTime, withDue.length) : null,
+    onTimeSample: withDue.length,
+    perDay: Math.round((done.length / days) * 10) / 10,
+  };
+}
+
+/** Longest run of consecutive days with at least one completion, ever. */
+export function longestStreak(tasks: Task[]): number {
+  const days = [...new Set(tasks.filter((t) => t.completedAt).map((t) => toISODate(new Date(t.completedAt!))))].sort();
+  let best = 0;
+  let run = 0;
+  let prev: Date | null = null;
+  for (const iso of days) {
+    const [y, m, d] = iso.split('-').map(Number);
+    const day = new Date(y, m - 1, d);
+    run = prev && toISODate(addDays(prev, 1)) === iso ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = day;
+  }
+  return best;
+}
+
+export interface HeatCell {
+  date: string;
+  count: number;
+  /** 0 = none, 1–4 = quartiles of the busiest day. */
+  level: 0 | 1 | 2 | 3 | 4;
+  future: boolean;
+}
+
+/** Completions per day as week columns (oldest first), for a contribution-style heatmap. */
+export function completionHeatmap(tasks: Task[], now: Date, weeks: number, weekStartsOn: 0 | 1): HeatCell[][] {
+  const counts = new Map<string, number>();
+  tasks.forEach((t) => {
+    if (!t.completedAt) return;
+    const key = toISODate(new Date(t.completedAt));
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  });
+  const first = addDays(startOfWeek(now, weekStartsOn), -7 * (weeks - 1));
+  const today = startOfDay(now);
+  const grid = Array.from({ length: weeks }, (_, w) =>
+    Array.from({ length: 7 }, (_, d) => {
+      const day = addDays(first, w * 7 + d);
+      const date = toISODate(day);
+      return { date, count: counts.get(date) ?? 0, future: day > today };
+    }),
+  );
+  const max = Math.max(1, ...grid.flat().map((c) => c.count));
+  return grid.map((week) =>
+    week.map((c) => ({ ...c, level: (c.count === 0 ? 0 : Math.min(4, Math.ceil((c.count / max) * 4))) as HeatCell['level'] })),
+  );
+}
+
+/** Completions grouped by hour of day (local time). */
+export function completionsByHour(tasks: Task[]) {
+  const counts = Array(24).fill(0) as number[];
+  tasks.forEach((t) => {
+    if (t.completedAt) counts[new Date(t.completedAt).getHours()]++;
+  });
+  return counts.map((completed, hour) => ({
+    hour,
+    label: new Date(2020, 0, 1, hour).toLocaleTimeString(undefined, { hour: 'numeric' }),
+    completed,
+  }));
 }

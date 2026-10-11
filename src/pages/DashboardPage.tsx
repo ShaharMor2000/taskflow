@@ -1,6 +1,5 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { Suspense, lazy, useMemo, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   Activity as ActivityIcon,
   AlertTriangle,
@@ -31,7 +30,12 @@ import { useTaskActions } from '../hooks/useTaskActions';
 import { StatCard } from '../components/ui/StatCard';
 import { ProgressBar, ProgressRing } from '../components/ui/Progress';
 import { EmptyState } from '../components/ui/EmptyState';
-import { CardHeader, ChartTooltip, axisProps, chartTheme } from '../components/ui/ChartKit';
+import { CardHeader, chartTheme } from '../components/ui/ChartKit';
+import { Skeleton } from '../components/ui/Skeleton';
+
+// Charts load separately so the rest of the dashboard appears immediately.
+const WeekBars = lazy(() => import('../components/charts/DashboardCharts'));
+const TrendArea = lazy(() => import('../components/charts/DashboardCharts').then((m) => ({ default: m.TrendArea })));
 import { TaskRow } from '../components/tasks/TaskRow';
 import { useToast } from '../components/ui/Toast';
 
@@ -223,19 +227,9 @@ export function DashboardPage() {
             <section className="card p-5 sm:p-6">
               <CardHeader title="This week" subtitle={`${weekVs.thisWeek} completed · ${week.reduce((s, d) => s + d.due, 0)} due`} />
               <div className="h-48" role="img" aria-label={`Tasks completed each day this week: ${week.map((d) => `${d.label} ${d.completed}`).join(', ')}`}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={week} barCategoryGap="30%">
-                    <CartesianGrid vertical={false} stroke={theme.grid} />
-                    <XAxis dataKey="label" {...axisProps(isDark)} />
-                    <YAxis allowDecimals={false} width={24} {...axisProps(isDark)} />
-                    <Tooltip cursor={{ fill: theme.cursor, radius: 6 }} content={<ChartTooltip labelKey="fullLabel" />} />
-                    <Bar dataKey="completed" name="Completed" radius={[4, 4, 0, 0]} maxBarSize={28}>
-                      {week.map((d) => (
-                        <Cell key={d.label} fill={theme.primary} fillOpacity={d.isToday ? 1 : d.isFuture ? 0.2 : 0.55} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<Skeleton className="h-full w-full" />}>
+                  <WeekBars data={week} isDark={isDark} />
+                </Suspense>
               </div>
             </section>
 
@@ -260,29 +254,9 @@ export function DashboardPage() {
                 }
               />
               <div className="h-48" role="img" aria-label={`Completions per day over the last 14 days, ${trend.change}% change versus the previous 14 days`}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={trend.series} margin={{ top: 6, right: 4 }}>
-                    <defs>
-                      <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={theme.primary} stopOpacity={0.22} />
-                        <stop offset="100%" stopColor={theme.primary} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid vertical={false} stroke={theme.grid} />
-                    <XAxis dataKey="label" {...axisProps(isDark)} interval="preserveStartEnd" minTickGap={28} />
-                    <YAxis allowDecimals={false} width={24} {...axisProps(isDark)} />
-                    <Tooltip cursor={{ stroke: theme.axis, strokeDasharray: '3 3' }} content={<ChartTooltip labelKey="fullLabel" />} />
-                    <Area
-                      type="monotone"
-                      dataKey="completed"
-                      name="Completed"
-                      stroke={theme.primary}
-                      strokeWidth={2}
-                      fill="url(#trendFill)"
-                      activeDot={{ r: 4, strokeWidth: 2, stroke: theme.surface }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <Suspense fallback={<Skeleton className="h-full w-full" />}>
+                  <TrendArea data={trend.series} isDark={isDark} />
+                </Suspense>
               </div>
             </section>
           </div>
