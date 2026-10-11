@@ -1,14 +1,14 @@
 import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { CalendarDays, Clock, Plus, Repeat, Trash2, X } from 'lucide-react';
 import type { Priority, Project, RecurrenceFrequency, TaskInput } from '../../types';
-import { MAX_INTERVAL, RECURRENCE_OPTIONS, describeRecurrence } from '../../lib/recurrence';
-import { addDays, isValidISODate, isValidTime, toISODate } from '../../lib/date';
+import { MAX_INTERVAL, RECURRENCE_OPTIONS, describeRecurrence, makeRecurrence } from '../../lib/recurrence';
+import { addDays, isValidISODate, isValidTime, parseISODate, toISODate } from '../../lib/date';
 import { PRIORITIES, PRIORITY_META, STATUSES, STATUS_META, getCategories, getTags } from '../../lib/tasks';
 import { cn, uid } from '../../lib/utils';
 import { useData } from '../../store/DataContext';
 import { useUI } from '../../store/UIContext';
 import { Modal } from '../ui/Modal';
-import { Select } from '../ui/Controls';
+import { Segmented, Select } from '../ui/Controls';
 import { TagChip } from '../ui/Badges';
 import { useToast } from '../ui/Toast';
 
@@ -30,7 +30,7 @@ const EMPTY: TaskInput = {
 const LIMITS = { title: 200, description: 5000, notes: 10000, category: 40, tag: 30, tags: 10, subtasks: 50 };
 const FORM_ID = 'task-form';
 
-type Errors = Partial<Record<'title' | 'description' | 'notes' | 'dueDate' | 'dueTime' | 'category' | 'tags', string>>;
+type Errors = Partial<Record<'title' | 'description' | 'notes' | 'dueDate' | 'dueTime' | 'until' | 'category' | 'tags', string>>;
 
 export function TaskFormModal() {
   const { taskForm, closeTaskForm } = useUI();
@@ -156,6 +156,8 @@ function TaskForm({ initial, projects, categories, knownTags, onSubmit }: TaskFo
     if (v.dueDate && !isValidISODate(v.dueDate)) e.dueDate = 'Enter a valid date.';
     if (v.dueTime && !isValidTime(v.dueTime)) e.dueTime = 'Enter a valid time.';
     if (v.dueTime && !v.dueDate) e.dueTime = 'Pick a due date before setting a time.';
+    if (v.recurrence?.until && !isValidISODate(v.recurrence.until)) e.until = 'Enter a valid end date.';
+    else if (v.recurrence?.until && v.dueDate && v.recurrence.until < v.dueDate) e.until = 'The end date must be on or after the due date.';
     if ((v.category ?? '').trim().length > LIMITS.category) e.category = `Category must be under ${LIMITS.category} characters.`;
     return e;
   };
@@ -364,7 +366,7 @@ function TaskForm({ initial, projects, categories, knownTags, onSubmit }: TaskFo
               value={values.recurrence?.frequency ?? 'none'}
               onChange={(e) => {
                 const freq = e.target.value as RecurrenceFrequency | 'none';
-                set('recurrence', freq === 'none' ? null : { frequency: freq, interval: values.recurrence?.interval ?? 1 });
+                set('recurrence', freq === 'none' ? null : makeRecurrence(freq, values.recurrence?.interval ?? 1, values.recurrence?.until ?? null));
               }}
             >
               <option value="none">Does not repeat</option>
@@ -396,11 +398,43 @@ function TaskForm({ initial, projects, categories, knownTags, onSubmit }: TaskFo
           )}
         </div>
         {values.recurrence && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px] text-slate-600 dark:text-slate-300">
+            <span>Ends</span>
+            <Segmented
+              size="sm"
+              label="Repeat ends"
+              value={values.recurrence.until ? 'on' : 'never'}
+              onChange={(v) =>
+                set('recurrence', {
+                  ...values.recurrence!,
+                  until: v === 'never' ? null : toISODate(addDays(values.dueDate ? parseISODate(values.dueDate) : today, 30)),
+                })
+              }
+              options={[
+                { value: 'never', label: 'Never' },
+                { value: 'on', label: 'On date' },
+              ]}
+            />
+            {values.recurrence.until && (
+              <input
+                type="date"
+                name="until"
+                aria-label="Repeat end date"
+                min={values.dueDate ?? undefined}
+                className={cn('input h-8 w-44 text-[13px]', errors.until && 'input-error')}
+                value={values.recurrence.until}
+                onChange={(e) => set('recurrence', { ...values.recurrence!, until: e.target.value || null })}
+              />
+            )}
+          </div>
+        )}
+        {values.recurrence && (
           <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
             {describeRecurrence(values.recurrence)}. Completing it schedules the next one automatically
             {values.dueDate ? '.' : ', starting today.'}
           </p>
         )}
+        <FieldError message={errors.until} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

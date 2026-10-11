@@ -18,7 +18,7 @@ import {
   CircleDot,
 } from 'lucide-react';
 import type { Priority, RecurrenceFrequency, Task, TaskStatus } from '../../types';
-import { RECURRENCE_OPTIONS, describeRecurrence } from '../../lib/recurrence';
+import { RECURRENCE_OPTIONS, describeRecurrence, makeRecurrence } from '../../lib/recurrence';
 import { toISODate } from '../../lib/date';
 import { formatDateTime, formatDueLabel, relativeTime } from '../../lib/date';
 import { PRIORITIES, PRIORITY_META, STATUSES, STATUS_META, isOverdue, subtaskProgress } from '../../lib/tasks';
@@ -179,14 +179,14 @@ function DetailBody({ task }: { task: Task }) {
                 value={task.recurrence?.frequency ?? ''}
                 onChange={(v) =>
                   updateTask(task.id, {
-                    recurrence: v ? { frequency: v as RecurrenceFrequency, interval: task.recurrence?.interval ?? 1 } : null,
+                    recurrence: v ? makeRecurrence(v as RecurrenceFrequency, task.recurrence?.interval ?? 1, task.recurrence?.until ?? null) : null,
                     // A repeating task needs an anchor date.
                     ...(v && !task.dueDate ? { dueDate: toISODate(now) } : {}),
                   })
                 }
                 options={[{ value: '', label: 'Does not repeat' }, ...RECURRENCE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))]}
               />
-              {task.recurrence && task.recurrence.interval > 1 && task.recurrence.frequency !== 'weekdays' && (
+              {task.recurrence && ((task.recurrence.interval > 1 && task.recurrence.frequency !== 'weekdays') || task.recurrence.until) && (
                 <span className="text-xs text-slate-500">{describeRecurrence(task.recurrence)}</span>
               )}
             </div>

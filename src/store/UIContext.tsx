@@ -1,8 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { TaskFilters, TaskInput, TaskSort } from '../types';
-import { DEFAULT_FILTERS } from '../lib/tasks';
+import { DEFAULT_FILTERS, SORT_OPTIONS, sanitizeFilters } from '../lib/tasks';
 import { useNow } from '../hooks/useNow';
-import { useData } from './DataContext';
+import { useDataState } from './DataContext';
 
 export type Route =
   | { name: 'dashboard' }
@@ -29,39 +29,75 @@ export function routeToHash(route: Route): string {
 type TaskFormState = { open: false } | { open: true; taskId?: string; defaults?: Partial<TaskInput> };
 type ProjectFormState = { open: false } | { open: true; projectId?: string };
 
-interface UIApi {
+export interface UIState {
   route: Route;
-  navigate: (route: Route) => void;
-  now: Date;
   isDark: boolean;
   filters: TaskFilters;
+  sort: TaskSort;
+  taskForm: TaskFormState;
+  detailTaskId: string | null;
+  projectForm: ProjectFormState;
+  paletteOpen: boolean;
+  shortcutsOpen: boolean;
+  mobileNavOpen: boolean;
+  sidebarCollapsed: boolean;
+  /** Tasks selected for bulk actions. */
+  selectedIds: string[];
+}
+
+/** Stable setters and commands; their identity never changes. */
+export interface UIActions {
+  /** Latest UI state without subscribing to changes. */
+  getUIState: () => UIState;
+  navigate: (route: Route) => void;
   setFilters: (patch: Partial<TaskFilters>) => void;
   resetFilters: () => void;
-  sort: TaskSort;
   setSort: (sort: TaskSort) => void;
-  taskForm: TaskFormState;
   openTaskForm: (opts?: { taskId?: string; defaults?: Partial<TaskInput> }) => void;
   closeTaskForm: () => void;
-  detailTaskId: string | null;
   openTaskDetail: (id: string) => void;
   closeTaskDetail: () => void;
-  projectForm: ProjectFormState;
   openProjectForm: (projectId?: string) => void;
   closeProjectForm: () => void;
-  paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
-  shortcutsOpen: boolean;
   setShortcutsOpen: (open: boolean) => void;
-  mobileNavOpen: boolean;
   setMobileNavOpen: (open: boolean) => void;
-  /** Tasks selected for bulk actions (list view). */
-  selectedIds: string[];
+  toggleSidebar: () => void;
   toggleSelected: (id: string) => void;
   setSelectedIds: (ids: string[]) => void;
   clearSelection: () => void;
 }
 
-const UIContext = createContext<UIApi | null>(null);
+export type UIApi = UIState & UIActions & { now: Date };
+
+const UIStateContext = createContext<UIState | null>(null);
+const UIActionsContext = createContext<UIActions | null>(null);
+const NowContext = createContext<Date | null>(null);
+
+const PREFS_KEY = 'taskflow:ui-prefs';
+
+interface Prefs {
+  filters: TaskFilters;
+  sort: TaskSort;
+  sidebarCollapsed: boolean;
+}
+
+/** View preferences are a per-browser convenience; failures fall back to defaults silently. */
+function loadPrefs(): Prefs {
+  const fallback: Prefs = { filters: DEFAULT_FILTERS, sort: { key: 'dueDate', reversed: false }, sidebarCollapsed: false };
+  try {
+    const raw = JSON.parse(localStorage.getItem(PREFS_KEY) ?? 'null');
+    if (!raw || typeof raw !== 'object') return fallback;
+    const sortKey = SORT_OPTIONS.some((o) => o.key === raw.sort?.key) ? raw.sort.key : fallback.sort.key;
+    return {
+      filters: sanitizeFilters(raw.filters),
+      sort: { key: sortKey, reversed: raw.sort?.reversed === true },
+      sidebarCollapsed: raw.sidebarCollapsed === true,
+    };
+  } catch {
+    return fallback;
+  }
+}
 
 function useSystemDark(): boolean {
   const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -75,11 +111,13 @@ function useSystemDark(): boolean {
 }
 
 export function UIProvider({ children }: { children: ReactNode }) {
-  const { settings } = useData();
+  const { settings } = useDataState();
   const now = useNow();
+  const [prefs] = useState(loadPrefs);
   const [route, setRoute] = useState<Route>(() => parseHash(window.location.hash));
-  const [filters, setFiltersState] = useState<TaskFilters>(DEFAULT_FILTERS);
-  const [sort, setSort] = useState<TaskSort>({ key: 'dueDate', reversed: false });
+  const [filters, setFiltersState] = useState<TaskFilters>(prefs.filters);
+  const [sort, setSort] = useState<TaskSort>(prefs.sort);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(prefs.sidebarCollapsed);
   const [taskForm, setTaskForm] = useState<TaskFormState>({ open: false });
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const [projectForm, setProjectForm] = useState<ProjectFormState>({ open: false });
@@ -97,6 +135,14 @@ export function UIProvider({ children }: { children: ReactNode }) {
   }, [isDark]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ filters, sort, sidebarCollapsed }));
+    } catch {
+      /* preferences are optional */
+    }
+  }, [filters, sort, sidebarCollapsed]);
+
+  useEffect(() => {
     const onHash = () => {
       setRoute(parseHash(window.location.hash));
       setMobileNavOpen(false);
@@ -107,53 +153,88 @@ export function UIProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
+  const state = useMemo<UIState>(
+    () => ({
+      route,
+      isDark,
+      filters,
+      sort,
+      taskForm,
+      detailTaskId,
+      projectForm,
+      paletteOpen,
+      shortcutsOpen,
+      mobileNavOpen,
+      sidebarCollapsed,
+      selectedIds,
+    }),
+    [route, isDark, filters, sort, taskForm, detailTaskId, projectForm, paletteOpen, shortcutsOpen, mobileNavOpen, sidebarCollapsed, selectedIds],
+  );
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const navigate = useCallback((next: Route) => {
     const hash = routeToHash(next);
     if (window.location.hash !== hash) window.location.hash = hash;
     setMobileNavOpen(false);
   }, []);
 
-  const setFilters = useCallback((patch: Partial<TaskFilters>) => setFiltersState((f) => ({ ...f, ...patch })), []);
-
-  const value = useMemo<UIApi>(
+  const actions = useMemo<UIActions>(
     () => ({
-      route,
+      getUIState: () => stateRef.current,
       navigate,
-      now,
-      isDark,
-      filters,
-      setFilters,
+      setFilters: (patch) => setFiltersState((f) => ({ ...f, ...patch })),
       resetFilters: () => setFiltersState(DEFAULT_FILTERS),
-      sort,
       setSort,
-      taskForm,
       openTaskForm: (opts = {}) => setTaskForm({ open: true, ...opts }),
       closeTaskForm: () => setTaskForm({ open: false }),
-      detailTaskId,
       openTaskDetail: setDetailTaskId,
       closeTaskDetail: () => setDetailTaskId(null),
-      projectForm,
       openProjectForm: (projectId) => setProjectForm({ open: true, projectId }),
       closeProjectForm: () => setProjectForm({ open: false }),
-      paletteOpen,
       setPaletteOpen,
-      shortcutsOpen,
       setShortcutsOpen,
-      mobileNavOpen,
       setMobileNavOpen,
-      selectedIds,
+      toggleSidebar: () => setSidebarCollapsed((c) => !c),
       toggleSelected: (id) => setSelectedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id])),
       setSelectedIds,
-      clearSelection: () => setSelectedIds([]),
+      clearSelection: () => setSelectedIds((ids) => (ids.length ? [] : ids)),
     }),
-    [route, navigate, now, isDark, filters, setFilters, sort, taskForm, detailTaskId, projectForm, paletteOpen, shortcutsOpen, mobileNavOpen, selectedIds],
+    [navigate],
   );
 
-  return <UIContext.Provider value={value}>{children}</UIContext.Provider>;
+  return (
+    <UIActionsContext.Provider value={actions}>
+      <NowContext.Provider value={now}>
+        <UIStateContext.Provider value={state}>{children}</UIStateContext.Provider>
+      </NowContext.Provider>
+    </UIActionsContext.Provider>
+  );
 }
 
-export function useUI(): UIApi {
-  const ctx = useContext(UIContext);
-  if (!ctx) throw new Error('useUI must be used inside <UIProvider>');
+export function useUIActions(): UIActions {
+  const ctx = useContext(UIActionsContext);
+  if (!ctx) throw new Error('useUIActions must be used inside <UIProvider>');
   return ctx;
+}
+
+export function useUIState(): UIState {
+  const ctx = useContext(UIStateContext);
+  if (!ctx) throw new Error('useUIState must be used inside <UIProvider>');
+  return ctx;
+}
+
+/** The app clock, refreshed every minute. */
+export function useClock(): Date {
+  const ctx = useContext(NowContext);
+  if (!ctx) throw new Error('useClock must be used inside <UIProvider>');
+  return ctx;
+}
+
+/** Everything together, for components that need several pieces. */
+export function useUI(): UIApi {
+  const state = useUIState();
+  const actions = useUIActions();
+  const now = useClock();
+  return useMemo(() => ({ ...state, ...actions, now }), [state, actions, now]);
 }

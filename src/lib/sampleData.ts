@@ -23,7 +23,7 @@ interface Seed {
   tags?: string[];
   subtasks?: [string, boolean][];
   notes?: string;
-  recurrence?: Recurrence;
+  recurrence?: Pick<Recurrence, 'frequency' | 'interval'>;
   /** Created N days ago. */
   createdAgo: number;
   /** Completed N days ago (done tasks only). */
@@ -132,7 +132,8 @@ export function createSampleData(now = new Date()): AppData {
       tags: s.tags ?? [],
       subtasks: (s.subtasks ?? []).map(([title, done]) => ({ id: uid('s_'), title, done })),
       notes: s.notes ?? '',
-      recurrence: s.recurrence ?? null,
+      recurrence: s.recurrence ? { ...s.recurrence, until: null, anchorDay: null } : null,
+      order: (i + 1) * 1024,
       createdAt,
       updatedAt: completedAt && completedAt > createdAt ? completedAt : createdAt,
       completedAt,
@@ -152,7 +153,7 @@ export function createSampleData(now = new Date()): AppData {
     .slice(0, 100);
 
   return {
-    version: 1,
+    version: 2,
     tasks,
     projects,
     activity,
@@ -173,5 +174,5 @@ export function createSampleData(now = new Date()): AppData {
 }
 
 export function createEmptyData(settings: Settings = DEFAULT_SETTINGS): AppData {
-  return { version: 1, tasks: [], projects: [], activity: [], notifications: [], notificationKeys: [], settings: { ...settings } };
+  return { version: 2, tasks: [], projects: [], activity: [], notifications: [], notificationKeys: [], settings: { ...settings } };
 }

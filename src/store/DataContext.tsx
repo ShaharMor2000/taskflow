@@ -12,7 +12,7 @@ import type {
   TaskStatus,
 } from '../types';
 import { createEmptyData, createSampleData } from '../lib/sampleData';
-import { loadData, saveData } from '../lib/storage';
+import { ORDER_STEP, loadData, saveData } from '../lib/storage';
 import { STATUS_META } from '../lib/tasks';
 import { nextOccurrence } from '../lib/recurrence';
 import { formatShortDate, parseISODate } from '../lib/date';
@@ -85,18 +85,31 @@ function withStatusBookkeeping(task: Task, patch: Partial<Task>, now: string): P
   return next;
 }
 
-export interface DataApi extends AppData {
+/** Fields that can be patched on a task: user input plus its board position. */
+export type TaskPatch = Partial<TaskInput> & { order?: number };
+
+export interface DataState extends AppData {
   storageError: boolean;
+}
+
+export interface DataActions {
+  /** Latest state without subscribing to changes (for event handlers). */
+  getState: () => AppData;
   createTask: (input: TaskInput) => Task;
-  /** Returns the next occurrence when completing a recurring task. */
-  updateTask: (id: string, patch: Partial<TaskInput>) => Task | undefined;
+  /**
+   * Returns the next occurrence when completing a recurring task. When a recurring task
+   * is completed and nothing is returned, its series has reached its end date.
+   */
+  updateTask: (id: string, patch: TaskPatch) => Task | undefined;
+  /** Moves a task to a board column, placing it before `beforeId` (or last when null). */
+  moveTask: (id: string, status: TaskStatus, beforeId: string | null) => Task | undefined;
   setStatus: (id: string, status: TaskStatus) => Task | undefined;
   toggleComplete: (id: string) => Task | undefined;
   /** Saves notes without adding an activity entry for every edit. */
   updateNotes: (id: string, notes: string) => void;
   /** Removes a task silently (used to undo an auto-created recurrence). */
   discardTask: (id: string) => void;
-  bulkUpdate: (ids: string[], patch: Partial<TaskInput>) => Task[];
+  bulkUpdate: (ids: string[], patch: TaskPatch) => Task[];
   bulkDelete: (ids: string[]) => Task[];
   restoreTasks: (tasks: Task[]) => void;
   deleteTask: (id: string) => Task | undefined;
@@ -118,7 +131,16 @@ export interface DataApi extends AppData {
   clearAllData: () => void;
 }
 
-const DataContext = createContext<DataApi | null>(null);
+export type DataApi = DataState & DataActions;
+
+const DataStateContext = createContext<DataState | null>(null);
+const DataActionsContext = createContext<DataActions | null>(null);
+
+/** Lowest-order position at the top of a board column. */
+function topOrder(tasks: Task[], status: TaskStatus): number {
+  const orders = tasks.filter((t) => t.status === status).map((t) => t.order);
+  return orders.length ? Math.min(...orders) - ORDER_STEP : ORDER_STEP;
+}
 
 function initialState(): AppData {
   return loadData() ?? createSampleData();
@@ -154,7 +176,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const createTask = useCallback(
     (input: TaskInput): Task => {
       const now = new Date().toISOString();
-      const task: Task = { ...input, id: uid('t_'), createdAt: now, updatedAt: now, completedAt: input.status === 'done' ? now : null };
+      const task: Task = {
+        ...input,
+        id: uid('t_'),
+        order: topOrder(stateRef.current.tasks, input.status),
+        createdAt: now,
+        updatedAt: now,
+        completedAt: input.status === 'done' ? now : null,
+      };
       dispatch({ type: 'task/add', task });
       log('task_created', `Created “${task.title}”`, { taskId: task.id });
       return task;
@@ -163,10 +192,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const updateTask = useCallback(
-    (id: string, patch: Partial<TaskInput>) => {
+    (id: string, patch: TaskPatch) => {
       const task = findTask(id);
       if (!task) return;
       const now = new Date().toISOString();
+      // Moving a monthly/yearly task to a new date restarts its anchor day from that date.
+      if (patch.dueDate !== undefined && patch.dueDate !== task.dueDate && (patch.recurrence ?? task.recurrence)?.anchorDay) {
+        patch = { ...patch, recurrence: { ...(patch.recurrence ?? task.recurrence)!, anchorDay: null } };
+      }
       const merged = { ...task, ...patch };
       const completingRecurring = patch.status === 'done' && task.status !== 'done' && merged.recurrence !== null;
       // The series moves on to the new occurrence, so the completed copy stops repeating.
@@ -174,12 +207,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'task/update', id, patch: withStatusBookkeeping(task, finalPatch, now) });
       const title = merged.title;
       let spawned: Task | undefined;
-      if (completingRecurring) {
+      const next = completingRecurring ? nextOccurrence(merged.dueDate, merged.recurrence!) : null;
+      if (next) {
         spawned = {
           ...merged,
           id: uid('t_'),
           status: 'todo',
-          dueDate: nextOccurrence(merged.dueDate, merged.recurrence!),
+          dueDate: next.dueDate,
+          recurrence: next.rule,
+          order: topOrder(stateRef.current.tasks, 'todo'),
           subtasks: merged.subtasks.map((st) => ({ ...st, id: uid('s_'), done: false })),
           createdAt: now,
           updatedAt: now,
@@ -191,7 +227,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (patch.status === 'done') log('task_completed', `Completed “${title}”`, { taskId: id });
         else if (task.status === 'done') log('task_reopened', `Reopened “${title}”`, { taskId: id });
         else log('task_moved', `Moved “${title}” to ${STATUS_META[patch.status].label}`, { taskId: id });
-      } else {
+      } else if (Object.keys(patch).some((k) => k !== 'order')) {
         log('task_updated', `Updated “${title}”`, { taskId: id });
       }
       if (spawned) {
@@ -212,6 +248,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [updateTask],
   );
 
+  const moveTask = useCallback(
+    (id: string, status: TaskStatus, beforeId: string | null) => {
+      const task = findTask(id);
+      if (!task) return undefined;
+      let column = stateRef.current.tasks.filter((t) => t.status === status && t.id !== id).sort((a, b) => a.order - b.order);
+      const indexOf = () => (beforeId ? column.findIndex((t) => t.id === beforeId) : -1);
+      const orderAt = (index: number): number => {
+        const before = index >= 0 ? column[index] : undefined;
+        const after = index > 0 ? column[index - 1] : index === -1 ? column[column.length - 1] : undefined;
+        if (before && after) return (before.order + after.order) / 2;
+        if (before) return before.order - ORDER_STEP;
+        return (after?.order ?? 0) + ORDER_STEP;
+      };
+      let order = orderAt(indexOf());
+      const index = indexOf();
+      // Floating-point gaps eventually run out; respace the column evenly when they get too small.
+      if (index > 0 && column[index].order - column[index - 1].order < 1e-6) {
+        column = column.map((t, i) => ({ ...t, order: (i + 1) * ORDER_STEP }));
+        column.forEach((t) => dispatch({ type: 'task/update', id: t.id, patch: { order: t.order } }));
+        order = orderAt(index);
+      }
+      if (status === task.status) {
+        if (order !== task.order) dispatch({ type: 'task/update', id, patch: { order } });
+        return undefined;
+      }
+      return updateTask(id, { status, order });
+    },
+    [updateTask],
+  );
+
   const updateNotes = useCallback((id: string, notes: string) => {
     if (findTask(id)) dispatch({ type: 'task/update', id, patch: { notes: notes.slice(0, 10000), updatedAt: new Date().toISOString() } });
   }, []);
@@ -219,7 +285,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const discardTask = useCallback((id: string) => dispatch({ type: 'task/delete', id }), []);
 
   const bulkUpdate = useCallback(
-    (ids: string[], patch: Partial<TaskInput>) =>
+    (ids: string[], patch: TaskPatch) =>
       ids.map((id) => updateTask(id, patch)).filter((t): t is Task => t !== undefined),
     [updateTask],
   );
@@ -341,12 +407,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (fresh.length) dispatch({ type: 'notifications/add', items: fresh });
   }, []);
 
-  const value = useMemo<DataApi>(
+  const actions = useMemo<DataActions>(
     () => ({
-      ...state,
-      storageError,
+      getState: () => stateRef.current,
       createTask,
       updateTask,
+      moveTask,
       setStatus,
       toggleComplete,
       updateNotes,
@@ -373,14 +439,35 @@ export function DataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'data/replace', data: { ...createSampleData(), settings: stateRef.current.settings } }),
       clearAllData: () => dispatch({ type: 'data/replace', data: createEmptyData(stateRef.current.settings) }),
     }),
-    [state, storageError, createTask, updateTask, setStatus, toggleComplete, updateNotes, discardTask, bulkUpdate, bulkDelete, restoreTasks, deleteTask, restoreTask, duplicateTask, toggleSubtask, addSubtask, removeSubtask, createProject, updateProject, deleteProject, addNotifications],
+    // Every callback above is stable, so this object keeps its identity for the app's lifetime.
+    [createTask, updateTask, moveTask, setStatus, toggleComplete, updateNotes, discardTask, bulkUpdate, bulkDelete, restoreTasks, deleteTask, restoreTask, duplicateTask, toggleSubtask, addSubtask, removeSubtask, createProject, updateProject, deleteProject, addNotifications],
   );
 
-  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
+  const dataState = useMemo<DataState>(() => ({ ...state, storageError }), [state, storageError]);
+
+  return (
+    <DataActionsContext.Provider value={actions}>
+      <DataStateContext.Provider value={dataState}>{children}</DataStateContext.Provider>
+    </DataActionsContext.Provider>
+  );
 }
 
-export function useData(): DataApi {
-  const ctx = useContext(DataContext);
-  if (!ctx) throw new Error('useData must be used inside <DataProvider>');
+/** Stable action functions. Components that only use this skip re-rendering when data changes. */
+export function useDataActions(): DataActions {
+  const ctx = useContext(DataActionsContext);
+  if (!ctx) throw new Error('useDataActions must be used inside <DataProvider>');
   return ctx;
+}
+
+export function useDataState(): DataState {
+  const ctx = useContext(DataStateContext);
+  if (!ctx) throw new Error('useDataState must be used inside <DataProvider>');
+  return ctx;
+}
+
+/** State and actions together, for components that need both. */
+export function useData(): DataApi {
+  const state = useDataState();
+  const actions = useDataActions();
+  return useMemo(() => ({ ...state, ...actions }), [state, actions]);
 }

@@ -1,11 +1,15 @@
 import type { Activity, AppData, AppNotification, Priority, Project, Settings, Subtask, Task, TaskStatus } from '../types';
 import { isValidISODate, isValidTime } from './date';
 import { DEFAULT_SETTINGS } from './sampleData';
-import { PRIORITIES, PROJECT_COLORS, STATUSES } from './tasks';
-import { isValidRecurrence } from './recurrence';
+import { PRIORITIES, PROJECT_COLORS, STATUSES, sortTasks } from './tasks';
+import { sanitizeRecurrence } from './recurrence';
 import { uid } from './utils';
 
+/** The key never changes, so data from every earlier version is found and migrated in place. */
 export const STORAGE_KEY = 'taskflow:data:v1';
+export const BACKUP_KEY = 'taskflow:backup:before-v2';
+export const DATA_VERSION = 2;
+export const ORDER_STEP = 1024;
 
 type Raw = Record<string, unknown>;
 const isObj = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -33,9 +37,11 @@ function sanitizeTask(raw: unknown, projectIds: Set<string>, now: string): Task 
           .filter((s): s is Raw => isObj(s) && typeof s.title === 'string')
           .map((s): Subtask => ({ id: str(s.id) || uid('s_'), title: str(s.title), done: s.done === true }))
       : [],
-    // Fields added in v2 default safely for data saved by v1.
+    // Fields added after v1 default safely for older data.
     notes: str(raw.notes).slice(0, 10000),
-    recurrence: isValidRecurrence(raw.recurrence) ? { frequency: raw.recurrence.frequency, interval: raw.recurrence.interval } : null,
+    recurrence: sanitizeRecurrence(raw.recurrence),
+    // NaN marks "no saved position"; assignMissingOrder fills it in below.
+    order: typeof raw.order === 'number' && Number.isFinite(raw.order) ? raw.order : Number.NaN,
     createdAt,
     updatedAt: isoOr(raw.updatedAt, createdAt),
     completedAt: status === 'done' ? isoOr(raw.completedAt, now) : null,
@@ -71,7 +77,7 @@ export function sanitizeData(raw: unknown): AppData | null {
   const now = new Date().toISOString();
   const projects = raw.projects.map((p) => sanitizeProject(p, now)).filter((p): p is Project => p !== null);
   const projectIds = new Set(projects.map((p) => p.id));
-  const tasks = raw.tasks.map((t) => sanitizeTask(t, projectIds, now)).filter((t): t is Task => t !== null);
+  const tasks = assignMissingOrder(raw.tasks.map((t) => sanitizeTask(t, projectIds, now)).filter((t): t is Task => t !== null));
   const activity = Array.isArray(raw.activity)
     ? raw.activity.filter((a): a is Activity => isObj(a) && typeof a.message === 'string' && typeof a.at === 'string')
     : [];
@@ -84,7 +90,7 @@ export function sanitizeData(raw: unknown): AppData | null {
     ? raw.notificationKeys.filter((k): k is string => typeof k === 'string')
     : [];
   return {
-    version: 1,
+    version: DATA_VERSION,
     tasks,
     projects,
     activity: activity.slice(0, 100),
@@ -94,10 +100,39 @@ export function sanitizeData(raw: unknown): AppData | null {
   };
 }
 
+/**
+ * Gives tasks without a manual board position one that matches how the board used to look
+ * (sorted by due date within each column), placed after any tasks that already have one.
+ */
+function assignMissingOrder(tasks: Task[]): Task[] {
+  if (!tasks.some((t) => Number.isNaN(t.order))) return tasks;
+  const assigned = new Map<string, number>();
+  for (const status of STATUSES) {
+    const column = tasks.filter((t) => t.status === status);
+    let next = Math.max(0, ...column.filter((t) => !Number.isNaN(t.order)).map((t) => t.order)) + ORDER_STEP;
+    for (const t of sortTasks(column.filter((t) => Number.isNaN(t.order)), { key: 'dueDate', reversed: false })) {
+      assigned.set(t.id, next);
+      next += ORDER_STEP;
+    }
+  }
+  return tasks.map((t) => (assigned.has(t.id) ? { ...t, order: assigned.get(t.id)! } : t));
+}
+
 export function loadData(): AppData | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? sanitizeData(JSON.parse(raw)) : null;
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    const version = isObj(parsed) ? Number(parsed.version) : NaN;
+    // Keep an untouched copy of older data before the first save in the new format.
+    if (version !== DATA_VERSION && localStorage.getItem(BACKUP_KEY) === null) {
+      try {
+        localStorage.setItem(BACKUP_KEY, raw);
+      } catch {
+        /* storage full: migrate anyway, the original stays readable until the next save */
+      }
+    }
+    return sanitizeData(parsed);
   } catch {
     return null;
   }

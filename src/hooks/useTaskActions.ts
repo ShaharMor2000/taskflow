@@ -1,36 +1,64 @@
-import { useCallback } from 'react';
-import type { Project, Task, TaskInput } from '../types';
-import { useData } from '../store/DataContext';
-import { useUI } from '../store/UIContext';
+import { useCallback, useMemo } from 'react';
+import type { Project, Task, TaskStatus } from '../types';
+import { useDataActions, type TaskPatch } from '../store/DataContext';
+import { useUIActions } from '../store/UIContext';
 import { useToast } from '../components/ui/Toast';
 import { useConfirm } from '../components/ui/ConfirmDialog';
 import { formatDueLabel } from '../lib/date';
+import { STATUS_META } from '../lib/tasks';
 import { pluralize } from '../lib/utils';
 
-/** User-facing task/project actions that combine data changes with confirmation and feedback. */
+/**
+ * User-facing task/project actions that combine data changes with confirmation and feedback.
+ * Built only from stable hooks, so the returned functions keep their identity across renders
+ * and memoized rows don't re-render because of them.
+ */
 export function useTaskActions() {
-  const data = useData();
-  const ui = useUI();
+  const data = useDataActions();
+  const ui = useUIActions();
   const toast = useToast();
   const confirm = useConfirm();
 
-  const toggleComplete = useCallback(
-    (task: Task) => {
-      const next = data.toggleComplete(task.id);
-      if (task.status === 'done') return;
+  /** Feedback after a task is marked done, with an undo that also removes any new occurrence. */
+  const announceCompletion = useCallback(
+    (task: Task, next: Task | undefined, title = 'Task completed') => {
+      const ended = task.recurrence !== null && !next;
       toast({
-        title: 'Task completed',
-        description: next?.dueDate ? `Next occurrence: ${formatDueLabel(next.dueDate, next.dueTime)}` : task.title,
+        title,
+        description: next?.dueDate
+          ? `Next occurrence: ${formatDueLabel(next.dueDate, next.dueTime)}`
+          : ended
+            ? 'That was the last occurrence in this series.'
+            : task.title,
         action: {
           label: 'Undo',
           onClick: () => {
             if (next) data.discardTask(next.id);
-            data.updateTask(task.id, { status: task.status, recurrence: task.recurrence });
+            data.updateTask(task.id, { status: task.status, recurrence: task.recurrence, order: task.order });
           },
         },
       });
     },
     [data, toast],
+  );
+
+  const toggleComplete = useCallback(
+    (task: Task) => {
+      const next = data.toggleComplete(task.id);
+      if (task.status !== 'done') announceCompletion(task, next);
+    },
+    [data, announceCompletion],
+  );
+
+  /** Moves a task on the board; completing it this way gets the same feedback as the checkbox. */
+  const moveToColumn = useCallback(
+    (task: Task, status: TaskStatus, beforeId: string | null) => {
+      const next = data.moveTask(task.id, status, beforeId);
+      if (status === task.status) return;
+      if (status === 'done') announceCompletion(task, next, 'Moved to Completed');
+      else toast({ title: `Moved to ${STATUS_META[status].label}`, description: task.title, tone: 'info' });
+    },
+    [data, toast, announceCompletion],
   );
 
   const requestDelete = useCallback(
@@ -42,7 +70,7 @@ export function useTaskActions() {
       });
       if (!ok) return false;
       const removed = data.deleteTask(task.id);
-      if (ui.detailTaskId === task.id) ui.closeTaskDetail();
+      if (ui.getUIState().detailTaskId === task.id) ui.closeTaskDetail();
       if (removed) {
         toast({
           title: 'Task deleted',
@@ -69,8 +97,8 @@ export function useTaskActions() {
 
   /** Applies the same change to every selected task, with a single undo. */
   const bulkUpdate = useCallback(
-    (ids: string[], patch: Partial<TaskInput>, label: string) => {
-      const before = data.tasks.filter((t) => ids.includes(t.id));
+    (ids: string[], patch: TaskPatch, label: string) => {
+      const before = data.getState().tasks.filter((t) => ids.includes(t.id));
       const spawned = data.bulkUpdate(ids, patch);
       toast({
         title: `${pluralize(before.length, 'task')} ${label}`,
@@ -87,6 +115,7 @@ export function useTaskActions() {
                 dueDate: t.dueDate,
                 dueTime: t.dueTime,
                 recurrence: t.recurrence,
+                order: t.order,
               }),
             );
           },
@@ -118,7 +147,7 @@ export function useTaskActions() {
 
   const requestDeleteProject = useCallback(
     async (project: Project) => {
-      const count = data.tasks.filter((t) => t.projectId === project.id).length;
+      const count = data.getState().tasks.filter((t) => t.projectId === project.id).length;
       const ok = await confirm({
         title: `Delete “${project.name}”?`,
         message:
@@ -135,5 +164,8 @@ export function useTaskActions() {
     [confirm, data, toast],
   );
 
-  return { toggleComplete, requestDelete, duplicate, bulkUpdate, bulkDelete, requestDeleteProject };
+  return useMemo(
+    () => ({ toggleComplete, moveToColumn, requestDelete, duplicate, bulkUpdate, bulkDelete, requestDeleteProject }),
+    [toggleComplete, moveToColumn, requestDelete, duplicate, bulkUpdate, bulkDelete, requestDeleteProject],
+  );
 }

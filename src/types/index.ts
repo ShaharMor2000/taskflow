@@ -7,6 +7,13 @@ export interface Recurrence {
   frequency: RecurrenceFrequency;
   /** Repeat every N units (ignored for weekdays). */
   interval: number;
+  /** Last date (YYYY-MM-DD) an occurrence may fall on; null repeats forever. */
+  until: string | null;
+  /**
+   * Day of month the series started on (monthly/yearly). Keeps a task that starts
+   * on the 31st from drifting to the 28th after February.
+   */
+  anchorDay: number | null;
 }
 
 export interface Subtask {
@@ -32,6 +39,8 @@ export interface Task {
   /** Free-form working notes, separate from the description. */
   notes: string;
   recurrence: Recurrence | null;
+  /** Manual position within its board column (lower = higher up). */
+  order: number;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -109,7 +118,7 @@ export interface Settings {
 }
 
 export interface AppData {
-  version: 1;
+  version: 2;
   tasks: Task[];
   projects: Project[];
   activity: Activity[];
@@ -118,7 +127,9 @@ export interface AppData {
   settings: Settings;
 }
 
-export type SortKey = 'dueDate' | 'priority' | 'createdAt' | 'title';
+export type SortKey = 'dueDate' | 'priority' | 'createdAt' | 'updatedAt' | 'title';
+
+export type DueFilter = 'all' | 'overdue' | 'today' | 'week' | 'upcoming' | 'none';
 
 export interface TaskFilters {
   search: string;
@@ -126,6 +137,9 @@ export interface TaskFilters {
   priority: Priority | 'all';
   category: string;
   projectId: string;
+  /** A tag name, or 'all'. */
+  tag: string;
+  due: DueFilter;
 }
 
 export interface TaskSort {
