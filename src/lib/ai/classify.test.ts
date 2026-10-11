@@ -11,6 +11,8 @@ describe('classifyGoal', () => {
     ['Finish the quarterly report', 'writing'],
     ['Plan a birthday party for Sam', 'event'],
     ['Organize a team offsite trip', 'event'],
+    ['Plan a weekend trip to Lisbon', 'trip'],
+    ['Plan my summer vacation in Greece', 'trip'],
     ['Clean the garage', 'generic'],
   ])('%s → %s', (goal, kind) => {
     expect(classifyGoal(goal)).toBe(kind);

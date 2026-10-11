@@ -19,8 +19,14 @@ const KEYWORDS: [Exclude<GoalKind, 'generic'>, string[]][] = [
   ],
   [
     'event',
-    ['event', 'party', 'wedding', 'trip', 'travel', 'vacation', 'holiday', 'conference', 'meetup', 'birthday',
-      'organize', 'organise', 'host', 'celebration', 'workshop', 'dinner', 'move', 'moving'],
+    ['event', 'party', 'wedding', 'conference', 'meetup', 'birthday', 'organize', 'organise', 'host', 'celebration',
+      'workshop', 'dinner', 'move', 'moving'],
+  ],
+  // After "event", so organizing a group trip still gets the event steps (invitations, bookings).
+  [
+    'trip',
+    ['trip', 'trips', 'travel', 'travelling', 'traveling', 'vacation', 'holiday', 'holidays', 'getaway', 'journey',
+      'flight', 'flights', 'backpacking', 'road trip'],
   ],
 ];
 

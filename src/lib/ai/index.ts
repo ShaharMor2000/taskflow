@@ -1,5 +1,5 @@
 export * from './types';
-export { PLAN_LIMITS, ESTIMATE_OPTIONS, snapEstimate } from './limits';
+export { PLAN_LIMITS, ESTIMATE_OPTIONS } from './limits';
 export { planError } from './errors';
 export { parseDeadlinePhrase, resolveDeadline, isDeadlineInRange } from './deadline';
 export { classifyGoal, extractTopic } from './classify';

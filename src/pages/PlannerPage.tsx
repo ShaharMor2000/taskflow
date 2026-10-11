@@ -67,7 +67,6 @@ export function PlannerPage() {
   const [errors, setErrors] = useState<PlannerFormErrors>({});
   const [view, setView] = useState<View>({ kind: 'idle' });
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [saving, setSaving] = useState(false);
   const [announcement, setAnnouncement] = useState('');
 
   const goalRef = useRef<HTMLTextAreaElement>(null);
@@ -114,6 +113,11 @@ export function PlannerPage() {
 
   const project = projectId ? projects.find((p) => p.id === projectId) : undefined;
   const hasPlan = view.kind === 'plan';
+
+  useEffect(() => {
+    document.body.classList.toggle('has-save-bar', hasPlan);
+    return () => document.body.classList.remove('has-save-bar');
+  }, [hasPlan]);
 
   const generate = async () => {
     if (generatingRef.current) return;
@@ -162,6 +166,7 @@ export function PlannerPage() {
         } else if (result.error.kind === 'empty') {
           setView({ kind: 'empty' });
           setAnnouncement('No tasks suggested.');
+          focusSoon('goal');
         } else {
           setView({ kind: 'error', error: result.error });
           setAnnouncement(result.error.message);
@@ -172,7 +177,6 @@ export function PlannerPage() {
 
       const plan = result.plan;
       savingRef.current = false;
-      setSaving(false);
       planIdRef.current = plan.id;
       setDrafts(plan.suggestions.map((s) => toDraft(s, plan.id)));
       setView({ kind: 'plan', plan });
@@ -254,7 +258,6 @@ export function PlannerPage() {
     const chosen = draftsRef.current.filter((d) => d.selected && isDraftValid(d));
     if (!chosen.length) return;
     savingRef.current = true;
-    setSaving(true);
 
     const plan = view.plan;
     // The project may have been deleted while the plan was open.
@@ -281,6 +284,9 @@ export function PlannerPage() {
         label: 'Undo',
         onClick: () => {
           const removed = bulkDelete(ids);
+          // If the success panel is still showing, go back to an empty planner (no-op after leaving the page).
+          setView((v) => (v.kind === 'saved' ? { kind: 'idle' } : v));
+          setAnnouncement(removed.length ? `Removed ${pluralize(removed.length, 'task')}.` : '');
           toast({ tone: 'info', title: removed.length ? `Removed ${pluralize(removed.length, 'task')}` : 'Nothing to undo' });
         },
       },
@@ -346,7 +352,7 @@ export function PlannerPage() {
         )}
 
         {view.kind === 'generating' && (
-          <div role="status" aria-label="Generating plan" className="space-y-3">
+          <div aria-hidden className="space-y-3">
             {[0, 1, 2].map((i) => (
               <div key={i} className="card space-y-3 p-4">
                 <div className="flex items-center gap-3">
@@ -466,8 +472,8 @@ export function PlannerPage() {
                   ? `${validSelected.length} of ${drafts.length} selected · ~${formatEstimate(totalMinutes)}`
                   : 'No tasks selected'}
               </p>
-              <button type="button" className="btn-primary h-10 w-full sm:w-auto" disabled={!validSelected.length || saving} onClick={save}>
-                {saving ? 'Adding…' : `Add ${pluralize(validSelected.length, 'task')}`}
+              <button type="button" className="btn-primary h-10 w-full sm:w-auto" disabled={!validSelected.length} onClick={save}>
+                {`Add ${pluralize(validSelected.length, 'task')}`}
               </button>
             </div>
           </section>

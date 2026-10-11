@@ -1,6 +1,6 @@
 import type { Priority } from '../../types';
 
-export type GoalKind = 'project' | 'study' | 'writing' | 'event' | 'generic';
+export type GoalKind = 'project' | 'study' | 'writing' | 'event' | 'trip' | 'generic';
 
 export type PlanSource = 'demo' | 'ai';
 

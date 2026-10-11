@@ -27,12 +27,3 @@ export const PLAN_LIMITS = {
 
 /** Estimate choices offered in the editor, in minutes. */
 export const ESTIMATE_OPTIONS = [15, 30, 45, 60, 90, 120, 180, 240, 360, 480] as const;
-
-/** Nearest offered estimate (ties go to the smaller option). */
-export function snapEstimate(minutes: number): number {
-  let best: number = ESTIMATE_OPTIONS[0];
-  for (const option of ESTIMATE_OPTIONS) {
-    if (Math.abs(option - minutes) < Math.abs(best - minutes)) best = option;
-  }
-  return best;
-}

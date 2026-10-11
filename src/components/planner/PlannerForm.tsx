@@ -172,7 +172,7 @@ export function PlannerForm({
           <kbd className="kbd">Enter</kbd>
           <span className="ml-1">to generate</span>
         </span>
-        <button type="submit" className="btn-primary h-10 w-full sm:w-auto" disabled={generating} aria-disabled={generating}>
+        <button type="submit" className="btn-primary h-10 w-full sm:w-auto" disabled={generating}>
           {generating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
           {generating ? 'Generating…' : hasPlan ? 'Regenerate' : 'Generate plan'}
         </button>

@@ -188,6 +188,48 @@ export const TEMPLATES: Record<GoalKind, StepTemplate[]> = {
       subtasks: ['Run through the checklist', 'Share final details with everyone'],
     },
   ],
+  trip: [
+    {
+      title: 'Choose dates and budget',
+      description: 'Pin down when you go and how much you want to spend.',
+      priority: 'high',
+      estimateMinutes: 30,
+      offset: 0,
+      subtasks: ['Fix the travel dates', 'Set a budget'],
+    },
+    {
+      title: 'Book travel and accommodation',
+      description: 'Reserve transport and a place to stay.',
+      priority: 'high',
+      estimateMinutes: 90,
+      offset: 0.2,
+      subtasks: ['Book transport', 'Book accommodation'],
+    },
+    {
+      title: 'Plan the itinerary',
+      description: 'List what you want to see and do each day.',
+      priority: 'medium',
+      estimateMinutes: 60,
+      offset: 0.45,
+      subtasks: ['Shortlist places to visit', 'Note opening hours and tickets'],
+    },
+    {
+      title: 'Prepare documents and packing',
+      description: 'Check ID, tickets and what to bring.',
+      priority: 'medium',
+      estimateMinutes: 45,
+      offset: 0.8,
+      subtasks: ['Check ID and travel documents', 'Write a packing list'],
+    },
+    {
+      title: 'Final check before leaving',
+      description: 'Confirm bookings and pack the last items.',
+      priority: 'high',
+      estimateMinutes: 30,
+      offset: 1,
+      subtasks: ['Confirm bookings and check-in', 'Pack and charge devices'],
+    },
+  ],
   generic: [
     {
       title: 'Clarify the outcome',

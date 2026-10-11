@@ -48,7 +48,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {createPortal(
         <div
           aria-live="polite"
-          className="pointer-events-none fixed inset-x-0 bottom-4 z-[70] flex flex-col items-center gap-2 px-4 sm:inset-x-auto sm:right-5 sm:items-end"
+          className="pointer-events-none fixed inset-x-0 bottom-4 z-[70] max-sm:[.has-save-bar_&]:bottom-24 flex flex-col items-center gap-2 px-4 sm:inset-x-auto sm:right-5 sm:items-end"
         >
           <AnimatePresence initial={false}>
             {toasts.map((t) => (

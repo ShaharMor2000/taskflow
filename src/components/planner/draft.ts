@@ -1,5 +1,5 @@
 import type { Priority } from '../../types';
-import { snapEstimate, type PlanSuggestion } from '../../lib/ai';
+import type { PlanSuggestion } from '../../lib/ai';
 import { uid } from '../../lib/utils';
 
 export interface DraftSubtask {
@@ -29,7 +29,7 @@ export function toDraft(s: PlanSuggestion, planId: string): Draft {
     title: s.title,
     description: s.description,
     priority: s.priority,
-    estimateMinutes: snapEstimate(s.estimateMinutes),
+    estimateMinutes: s.estimateMinutes,
     dueDate: s.dueDate,
     subtasks: s.subtasks.map((title) => ({ id: uid('ds_'), title })),
     dateAdjusted: s.dateAdjusted,
