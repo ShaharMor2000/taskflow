@@ -112,6 +112,10 @@ export function useKeyboardShortcuts() {
           e.preventDefault();
           u.setShortcutsOpen(true);
           break;
+        case '[':
+          e.preventDefault();
+          u.toggleSidebar();
+          break;
         case 'D':
           e.preventDefault();
           updateSettings({ theme: u.isDark ? 'light' : 'dark' });

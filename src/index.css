@@ -5,6 +5,10 @@
 @layer base {
   :root {
     --hour-line: rgb(241 245 249);
+    --sidebar-w: 16rem;
+  }
+  :root.sidebar-collapsed {
+    --sidebar-w: 4.5rem;
   }
   .dark {
     --hour-line: rgba(255, 255, 255, 0.05);

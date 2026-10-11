@@ -171,8 +171,8 @@ export function DashboardPage() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="space-y-6 xl:col-span-2">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="min-w-0 space-y-6 xl:col-span-2">
           <section className="card p-5 sm:p-6">
             <CardHeader
               title="Today's priorities"
@@ -223,7 +223,7 @@ export function DashboardPage() {
             )}
           </section>
 
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <section className="card p-5 sm:p-6">
               <CardHeader title="This week" subtitle={`${weekVs.thisWeek} completed · ${week.reduce((s, d) => s + d.due, 0)} due`} />
               <div className="h-48" role="img" aria-label={`Tasks completed each day this week: ${week.map((d) => `${d.label} ${d.completed}`).join(', ')}`}>
@@ -298,7 +298,7 @@ export function DashboardPage() {
           )}
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <section className="card p-5 sm:p-6">
             <CardHeader title="Daily focus" subtitle="Share of today's tasks completed" />
             <div className="flex items-center gap-5">

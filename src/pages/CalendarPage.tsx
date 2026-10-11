@@ -147,7 +147,7 @@ export function CalendarPage() {
         <TaskToolbar showSort={false} />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="card overflow-hidden" aria-label="Calendar">
           <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-white/[0.06]">
             <h2 className="min-w-0 flex-1 text-base font-semibold tracking-tight text-slate-900 dark:text-white" aria-live="polite">

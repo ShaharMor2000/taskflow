@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Plus, X } from 'lucide-react';
@@ -8,13 +8,21 @@ import { SidebarContent } from './Sidebar';
 import { Topbar } from './Topbar';
 
 export function AppLayout({ children, pageKey }: { children: ReactNode; pageKey: string }) {
-  const { mobileNavOpen, setMobileNavOpen, openTaskForm, route, selectedIds } = useUI();
+  const { mobileNavOpen, setMobileNavOpen, openTaskForm, route, selectedIds, sidebarCollapsed } = useUI();
+
+  // Expose the sidebar width as a CSS variable so fixed elements (like the bulk bar) can follow it.
+  useEffect(() => {
+    document.documentElement.classList.toggle('sidebar-collapsed', sidebarCollapsed);
+  }, [sidebarCollapsed]);
   const drawerRef = useRef<HTMLDivElement>(null);
   useLayer(mobileNavOpen, () => setMobileNavOpen(false), drawerRef);
 
   return (
     <div className="min-h-screen">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-200/70 bg-white/70 backdrop-blur-xl lg:block dark:border-white/[0.06] dark:bg-ink-900/60">
+      <aside
+        aria-label="Sidebar"
+        className="fixed inset-y-0 left-0 z-30 hidden w-[var(--sidebar-w)] border-r border-slate-200/70 bg-white/70 backdrop-blur-xl transition-[width] duration-200 ease-out lg:block dark:border-white/[0.06] dark:bg-ink-900/60"
+      >
         <SidebarContent />
       </aside>
 
@@ -51,7 +59,7 @@ export function AppLayout({ children, pageKey }: { children: ReactNode; pageKey:
         document.body,
       )}
 
-      <div className="lg:pl-64">
+      <div className="transition-[padding] duration-200 ease-out lg:pl-[var(--sidebar-w)]">
         <Topbar />
         <main className="mx-auto max-w-[1400px] px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
           <motion.div key={pageKey} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: 'easeOut' }}>

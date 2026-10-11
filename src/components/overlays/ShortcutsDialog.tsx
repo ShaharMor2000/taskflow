@@ -7,6 +7,7 @@ const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['Ctrl', 'K'], label: 'Search & commands' },
   { keys: ['/'], label: 'Search & commands' },
   { keys: ['Shift', 'D'], label: 'Toggle dark mode' },
+  { keys: ['['], label: 'Collapse or expand sidebar' },
   { keys: ['G', 'D'], label: 'Go to Dashboard' },
   { keys: ['G', 'T'], label: 'Go to My Tasks' },
   { keys: ['G', 'B'], label: 'Go to Board' },

@@ -7,16 +7,18 @@ import {
   FolderKanban,
   LayoutDashboard,
   ListTodo,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
   Settings as SettingsIcon,
   type LucideIcon,
 } from 'lucide-react';
-import { useData } from '../../store/DataContext';
-import { useUI, type Route } from '../../store/UIContext';
+import { useDataState } from '../../store/DataContext';
+import { useClock, useUIActions, useUIState, type Route } from '../../store/UIContext';
 import { cn } from '../../lib/utils';
 import { isSameDay } from '../../lib/date';
-import { ProgressBar } from '../ui/Progress';
+import { ProgressBar, ProgressRing } from '../ui/Progress';
 
 interface NavItem {
   name: Exclude<Route['name'], 'project'>;
@@ -34,22 +36,38 @@ export const NAV_ITEMS: NavItem[] = [
   { name: 'analytics', label: 'Analytics', icon: BarChart3, shortcut: 'G A' },
 ];
 
+export function LogoMark() {
+  return (
+    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-violet-600 shadow-sm shadow-violet-600/30">
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+      </svg>
+    </div>
+  );
+}
+
 export function Logo() {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="grid h-8 w-8 place-items-center rounded-[10px] bg-violet-600 shadow-sm shadow-violet-600/30">
-        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 12.5l4.5 4.5L19 7.5" />
-        </svg>
-      </div>
+      <LogoMark />
       <span className="text-[17px] font-bold tracking-tight text-slate-900 dark:text-white">TaskFlow</span>
     </div>
   );
 }
 
+const itemBase =
+  'relative flex h-9 w-full items-center rounded-xl text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50';
+const itemIdle =
+  'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.04] dark:hover:text-slate-100';
+
 export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 'mobile' }) {
-  const { tasks, projects, settings } = useData();
-  const { route, navigate, now, openTaskForm, openProjectForm, setPaletteOpen } = useUI();
+  const { tasks, projects, settings } = useDataState();
+  const { route, sidebarCollapsed } = useUIState();
+  const { navigate, openTaskForm, openProjectForm, setPaletteOpen, toggleSidebar } = useUIActions();
+  const now = useClock();
+  // The mobile drawer is always full width.
+  const collapsed = variant === 'desktop' && sidebarCollapsed;
+
   const { openCount, openByProject, completedToday } = useMemo(() => {
     const byProject = new Map<string, number>();
     let open = 0;
@@ -76,32 +94,56 @@ export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-16 items-center px-5">
-        <button onClick={() => navigate({ name: 'dashboard' })} aria-label="TaskFlow home" className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50">
-          <Logo />
+      <div className={cn('flex h-16 shrink-0 items-center', collapsed ? 'justify-center px-2' : 'justify-between px-5')}>
+        <button
+          onClick={() => navigate({ name: 'dashboard' })}
+          aria-label="TaskFlow home"
+          className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50"
+        >
+          {collapsed ? <LogoMark /> : <Logo />}
         </button>
+        {variant === 'desktop' && !collapsed && (
+          <button className="btn-icon h-8 w-8" onClick={toggleSidebar} aria-label="Collapse sidebar" title="Collapse sidebar ( [ )">
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      <div className="px-3 pb-2">
-        <button onClick={() => openTaskForm()} className="btn-primary h-9 w-full justify-start">
+      <div className={cn('space-y-1.5 pb-2', collapsed ? 'px-2' : 'px-3')}>
+        <button
+          onClick={() => openTaskForm()}
+          className={cn('btn-primary h-9 w-full', collapsed ? 'px-0' : 'justify-start')}
+          aria-label="New task"
+          title={collapsed ? 'New task (N)' : undefined}
+        >
           <Plus className="h-4 w-4" />
-          New task
-          <kbd className="ml-auto rounded-md bg-white/20 px-1.5 text-[11px] font-semibold">N</kbd>
+          {!collapsed && (
+            <>
+              New task
+              <kbd className="ml-auto rounded-md bg-white/20 px-1.5 text-[11px] font-semibold">N</kbd>
+            </>
+          )}
         </button>
         <button
           onClick={() => setPaletteOpen(true)}
-          className="mt-1.5 flex h-9 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.04] dark:hover:text-slate-100"
+          aria-label="Search"
+          title={collapsed ? 'Search (Ctrl K)' : undefined}
+          className={cn(itemBase, itemIdle, collapsed ? 'justify-center' : 'gap-3 px-3')}
         >
           <Search className="h-[18px] w-[18px]" />
-          Search
-          <span className="ml-auto flex gap-0.5">
-            <kbd className="kbd">Ctrl</kbd>
-            <kbd className="kbd">K</kbd>
-          </span>
+          {!collapsed && (
+            <>
+              Search
+              <span className="ml-auto flex gap-0.5">
+                <kbd className="kbd">Ctrl</kbd>
+                <kbd className="kbd">K</kbd>
+              </span>
+            </>
+          )}
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 py-2" aria-label="Main navigation">
+      <nav className={cn('flex-1 overflow-y-auto py-2', collapsed ? 'px-2' : 'px-3')} aria-label="Main navigation">
         <ul className="space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const active = isActive(item.name);
@@ -110,11 +152,9 @@ export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 
                 <button
                   onClick={() => navigate({ name: item.name })}
                   aria-current={active ? 'page' : undefined}
+                  aria-label={collapsed ? item.label : undefined}
                   title={`${item.label} (${item.shortcut})`}
-                  className={cn(
-                    'relative flex h-9 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50',
-                    active ? 'text-violet-700 dark:text-white' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.04] dark:hover:text-slate-100',
-                  )}
+                  className={cn(itemBase, collapsed ? 'justify-center' : 'gap-3 px-3', active ? 'text-violet-700 dark:text-white' : itemIdle)}
                 >
                   {active && (
                     <motion.span
@@ -124,11 +164,14 @@ export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 
                     />
                   )}
                   <item.icon className="relative h-[18px] w-[18px]" />
-                  <span className="relative">{item.label}</span>
-                  {item.name === 'tasks' && openCount > 0 && (
-                    <span className="relative ml-auto rounded-md bg-slate-100 px-1.5 text-[11px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                  {!collapsed && <span className="relative">{item.label}</span>}
+                  {item.name === 'tasks' && openCount > 0 && !collapsed && (
+                    <span className="relative ml-auto rounded-md bg-slate-100 px-1.5 text-[11px] font-semibold tabular-nums text-slate-600 dark:bg-white/10 dark:text-slate-300">
                       {openCount}
                     </span>
+                  )}
+                  {item.name === 'tasks' && openCount > 0 && collapsed && (
+                    <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-violet-500" aria-hidden />
                   )}
                 </button>
               </li>
@@ -137,13 +180,17 @@ export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 
         </ul>
 
         <div className="mt-6">
-          <div className="mb-1 flex items-center justify-between px-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Projects</span>
-            <button onClick={() => openProjectForm()} className="btn-icon h-6 w-6 rounded-md" aria-label="Create project" title="New project">
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {projects.length === 0 ? (
+          {collapsed ? (
+            <div className="mx-auto mb-2 h-px w-6 bg-slate-200 dark:bg-white/10" />
+          ) : (
+            <div className="mb-1 flex items-center justify-between px-3">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Projects</span>
+              <button onClick={() => openProjectForm()} className="btn-icon h-6 w-6 rounded-md" aria-label="Create project" title="New project">
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          {projects.length === 0 && !collapsed ? (
             <button onClick={() => openProjectForm()} className="w-full rounded-xl px-3 py-2 text-left text-[13px] text-slate-400 hover:bg-slate-100/80 dark:hover:bg-white/[0.04]">
               Create your first project
             </button>
@@ -157,52 +204,85 @@ export function SidebarContent({ variant = 'desktop' }: { variant?: 'desktop' | 
                     <button
                       onClick={() => navigate({ name: 'project', id: p.id })}
                       aria-current={active ? 'page' : undefined}
+                      aria-label={collapsed ? p.name : undefined}
+                      title={collapsed ? `${p.name}${open ? ` · ${open} open` : ''}` : undefined}
                       className={cn(
-                        'flex h-8 w-full items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-colors',
-                        active
-                          ? 'bg-slate-100 text-slate-900 dark:bg-white/[0.07] dark:text-white'
-                          : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.04] dark:hover:text-slate-100',
+                        'flex h-8 w-full items-center rounded-xl text-[13px] font-medium transition-colors',
+                        collapsed ? 'justify-center' : 'gap-3 px-3',
+                        active ? 'bg-slate-100 text-slate-900 dark:bg-white/[0.07] dark:text-white' : itemIdle,
                       )}
                     >
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-[4px]" style={{ backgroundColor: p.color }} />
-                      <span className="truncate">{p.name}</span>
-                      {open > 0 && <span className="ml-auto text-[11px] text-slate-400">{open}</span>}
+                      <span className={cn('shrink-0 rounded-[4px]', collapsed ? 'h-3 w-3' : 'h-2.5 w-2.5')} style={{ backgroundColor: p.color }} />
+                      {!collapsed && <span className="truncate">{p.name}</span>}
+                      {!collapsed && open > 0 && <span className="ml-auto text-[11px] tabular-nums text-slate-400">{open}</span>}
                     </button>
                   </li>
                 );
               })}
+              {collapsed && (
+                <li>
+                  <button
+                    onClick={() => openProjectForm()}
+                    className={cn('flex h-8 w-full items-center justify-center rounded-xl', itemIdle)}
+                    aria-label="Create project"
+                    title="New project"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              )}
             </ul>
           )}
         </div>
       </nav>
 
-      <div className="space-y-3 border-t border-slate-200/70 p-3 dark:border-white/[0.06]">
-        <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200/70 dark:bg-white/[0.03] dark:ring-white/[0.06]">
-          <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="font-medium text-slate-700 dark:text-slate-200">Daily goal</span>
-            <span className="font-semibold text-violet-700 dark:text-violet-300">
-              {completedToday}/{settings.dailyGoal}
-            </span>
+      <div className={cn('space-y-3 border-t border-slate-200/70 dark:border-white/[0.06]', collapsed ? 'p-2' : 'p-3')}>
+        {collapsed ? (
+          <div className="flex justify-center" title={`Daily goal: ${completedToday}/${settings.dailyGoal}`}>
+            <ProgressRing value={goalProgress} size={36} stroke={4} label="Daily goal progress">
+              <span className="text-[10px] font-bold tabular-nums text-slate-700 dark:text-slate-200">{completedToday}</span>
+            </ProgressRing>
           </div>
-          <ProgressBar value={goalProgress} label="Daily goal progress" />
-        </div>
+        ) : (
+          <div className="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-200/70 dark:bg-white/[0.03] dark:ring-white/[0.06]">
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="font-medium text-slate-700 dark:text-slate-200">Daily goal</span>
+              <span className="font-semibold tabular-nums text-violet-700 dark:text-violet-300">
+                {completedToday}/{settings.dailyGoal}
+              </span>
+            </div>
+            <ProgressBar value={goalProgress} label="Daily goal progress" />
+          </div>
+        )}
         <button
           onClick={() => navigate({ name: 'settings' })}
           aria-current={route.name === 'settings' ? 'page' : undefined}
+          aria-label={collapsed ? 'Settings' : undefined}
+          title={collapsed ? `${settings.userName} · Settings` : undefined}
           className={cn(
-            'flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-slate-100/80 dark:hover:bg-white/[0.04]',
+            'flex w-full items-center rounded-xl p-2 text-left transition-colors hover:bg-slate-100/80 dark:hover:bg-white/[0.04]',
+            collapsed ? 'justify-center' : 'gap-3',
             route.name === 'settings' && 'bg-slate-100 dark:bg-white/[0.06]',
           )}
         >
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-100 text-xs font-bold text-violet-700 dark:bg-violet-500/20 dark:text-violet-200">
             {initials || '?'}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">{settings.userName}</span>
-            <span className="block text-[11px] text-slate-500">Personal workspace</span>
-          </span>
-          <SettingsIcon className="h-4 w-4 text-slate-400" />
+          {!collapsed && (
+            <>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">{settings.userName}</span>
+                <span className="block text-[11px] text-slate-500">Personal workspace</span>
+              </span>
+              <SettingsIcon className="h-4 w-4 text-slate-400" />
+            </>
+          )}
         </button>
+        {collapsed && (
+          <button className="btn-icon mx-auto flex h-8 w-8" onClick={toggleSidebar} aria-label="Expand sidebar" title="Expand sidebar ( [ )">
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </div>
   );

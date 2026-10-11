@@ -1,8 +1,8 @@
-import { Menu as MenuIcon, Moon, Plus, Search, Sun } from 'lucide-react';
-import { useData } from '../../store/DataContext';
+import { ChevronRight, Menu as MenuIcon, Moon, Plus, Search, Sun } from 'lucide-react';
+import { useData, useDataState } from '../../store/DataContext';
 import { useUI } from '../../store/UIContext';
 import { NotificationsMenu } from '../overlays/NotificationsMenu';
-import { Logo } from './Sidebar';
+import { Logo, NAV_ITEMS } from './Sidebar';
 
 export function Topbar() {
   const { updateSettings } = useData();
@@ -17,10 +17,11 @@ export function Topbar() {
         <div className="lg:hidden">
           <Logo />
         </div>
+        <Breadcrumbs />
 
         <button
           onClick={() => setPaletteOpen(true)}
-          className="ml-auto hidden h-9 w-full max-w-sm items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-400 shadow-sm transition hover:border-slate-300 hover:text-slate-500 md:flex lg:ml-0 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/20"
+          className="ml-auto hidden h-9 w-full max-w-sm items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 text-[13px] text-slate-400 shadow-sm transition hover:border-slate-300 hover:text-slate-500 md:flex lg:ml-0 xl:ml-4 dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-white/20"
         >
           <Search className="h-4 w-4" />
           Search tasks, projects, commands…
@@ -53,5 +54,34 @@ export function Topbar() {
         </div>
       </div>
     </header>
+  );
+}
+
+/** Where you are, shown on wide screens next to the search box. */
+function Breadcrumbs() {
+  const { route, navigate } = useUI();
+  const { projects } = useDataState();
+  const section = route.name === 'project' ? 'projects' : route.name;
+  const label = section === 'settings' ? 'Settings' : NAV_ITEMS.find((n) => n.name === section)?.label ?? '';
+  const project = route.name === 'project' ? projects.find((p) => p.id === route.id) : undefined;
+  return (
+    <nav aria-label="Breadcrumb" className="hidden min-w-0 shrink items-center gap-1.5 text-sm xl:flex">
+      {project ? (
+        <>
+          <button onClick={() => navigate({ name: 'projects' })} className="rounded px-1 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+            {label}
+          </button>
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 dark:text-slate-600" />
+          <span className="flex min-w-0 items-center gap-1.5 font-medium text-slate-900 dark:text-white" aria-current="page">
+            <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ backgroundColor: project.color }} />
+            <span className="truncate">{project.name}</span>
+          </span>
+        </>
+      ) : (
+        <span className="px-1 font-medium text-slate-900 dark:text-white" aria-current="page">
+          {label}
+        </span>
+      )}
+    </nav>
   );
 }

@@ -146,7 +146,7 @@ export function AnalyticsPage() {
         />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
         <section className="card p-5 sm:p-6 xl:col-span-2">
           <CardHeader
             title="Created vs completed"

@@ -43,7 +43,7 @@ export function BulkActionBar() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 24, scale: 0.98 }}
           transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-          className="fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-max items-center gap-0.5 rounded-2xl sm:gap-1 border border-slate-200/80 bg-white/95 p-1.5 shadow-pop backdrop-blur sm:bottom-6 lg:left-64 dark:border-white/10 dark:bg-ink-800/95"
+          className="fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-max items-center gap-0.5 rounded-2xl sm:gap-1 border border-slate-200/80 bg-white/95 p-1.5 shadow-pop backdrop-blur sm:bottom-6 lg:left-[var(--sidebar-w)] dark:border-white/10 dark:bg-ink-800/95"
         >
           <span className="flex shrink-0 items-center gap-2 py-1 pl-2.5 pr-2 text-[13px] font-semibold text-slate-900 dark:text-white">
             <span className="grid h-6 min-w-[24px] place-items-center rounded-md bg-violet-600 px-1.5 text-xs text-white">{count}</span>
