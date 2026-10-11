@@ -256,13 +256,13 @@ describe('validatePlan: unicode, RTL and emoji', () => {
 
   // Known bug (see QA report): titleKey only keeps letters and digits, so an emoji-only title
   // gets an empty key and is dropped as unusable even though it is a non-empty 1–200 char title.
-  it.fails('keeps an emoji-only title (known bug: dropped today)', () => {
+  it('keeps an emoji-only title', () => {
     expect(one(item('🎉🎂')).title).toBe('🎉🎂');
   });
 
   // Known bug (see QA report): truncation uses String#slice on UTF-16 code units, so an emoji at
   // the 200-character boundary is cut in half and leaves a lone surrogate in the title.
-  it.fails('never leaves a lone surrogate when truncating (known bug)', () => {
+  it('never leaves a lone surrogate when truncating', () => {
     const title = one(item(`${'a'.repeat(199)}😀 tail`)).title;
     expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(title)).toBe(false);
   });

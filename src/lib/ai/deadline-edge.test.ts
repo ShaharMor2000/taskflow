@@ -81,9 +81,14 @@ describe('parseDeadlinePhrase: weekday names on that same weekday', () => {
     }
   });
 
-  it('"by Friday" on a Friday means one week later; "next Friday" is always later than "by Friday"', () => {
+  it('on a Friday, "by Friday" and "next Friday" both mean a week from today', () => {
     expect(parse('by Friday')).toBe('2026-10-23');
-    expect(parse('next Friday')! > parse('by Friday')!).toBe(true);
+    expect(parse('next Friday')).toBe('2026-10-23');
+  });
+
+  it('on other days "next Friday" is the Friday after the coming one', () => {
+    expect(at('2026-10-14')('next Friday')).toBe('2026-10-23');
+    expect(at('2026-10-14')('by Friday')).toBe('2026-10-16');
   });
 
   it('other weekdays from a Friday', () => {
@@ -157,16 +162,22 @@ describe('parseDeadlinePhrase: phrases inside a sentence', () => {
     expect(parse('Fix the frisbee')).toBeNull();
   });
 
-  // Known bug (see QA report): short weekday abbreviations are also ordinary English words, so
-  // goals mentioning "sun", "sat" or "wed" get a deadline the user never asked for.
-  it.fails('does not read the words "sun", "sat" or "wed" as weekdays (known bug)', () => {
+  // Short weekday abbreviations are also ordinary English words, so they only count after a
+  // preposition or "this"/"next".
+  it('does not read the words "sun", "sat" or "wed" as weekdays', () => {
     expect(parse('Build a sun room')).toBeNull();
     expect(parse('Re-sit the exam I sat last year')).toBeNull();
     expect(parse('Get wed in the spring')).toBeNull();
   });
 
-  it('a false weekday match also changes the topic (documents the same bug)', () => {
-    expect(extractTopic('Build a sun room')).toBe('room');
+  it('still reads abbreviations after a preposition or this/next', () => {
+    expect(parse('Finish the deck by fri')).toBe('2026-10-16');
+    expect(parse('Report due wed.')).toBe('2026-10-14');
+    expect(parse('Launch next sat')).toBe('2026-10-24');
+  });
+
+  it('keeps ordinary words in the topic', () => {
+    expect(extractTopic('Build a sun room')).toBe('sun room');
   });
 });
 

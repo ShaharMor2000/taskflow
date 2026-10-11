@@ -25,6 +25,38 @@ function retryAfterSeconds(header: string | null): number | undefined {
   return Math.min(600, Math.max(1, n));
 }
 
+/**
+ * Reads a response body as text but stops as soon as it exceeds `maxBytes`, so a misbehaving
+ * endpoint streaming megabytes is cut off early instead of being buffered in full.
+ * Returns null when the limit is exceeded.
+ */
+export async function readBodyLimited(res: Response, maxBytes: number): Promise<string | null> {
+  if (!res.body) {
+    const text = await res.text();
+    return new TextEncoder().encode(text).length > maxBytes ? null : text;
+  }
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 let planSeq = 0;
 
 /**
@@ -86,8 +118,8 @@ export function createHttpProvider({
 
         const declared = Number(res.headers.get('Content-Length'));
         if (Number.isFinite(declared) && declared > PLAN_LIMITS.responseBytes) return fail(planError('too_large'));
-        const text = await res.text();
-        if (text.length > PLAN_LIMITS.responseBytes) return fail(planError('too_large'));
+        const text = await readBodyLimited(res, PLAN_LIMITS.responseBytes);
+        if (text === null) return fail(planError('too_large'));
 
         let json: unknown;
         try {

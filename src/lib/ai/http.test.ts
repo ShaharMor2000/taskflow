@@ -142,3 +142,28 @@ describe('createHttpProvider', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+describe('readBodyLimited', () => {
+  it('stops reading a stream without Content-Length as soon as it passes the limit', async () => {
+    let pulled = 0;
+    const chunk = new Uint8Array(16 * 1024).fill(0x61); // 16 KB of "a"
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        if (pulled > 1000) controller.close(); // ~16 MB if read to the end
+        else controller.enqueue(chunk);
+      },
+    });
+    const { provider } = setup(async () => new Response(stream, { status: 200 }));
+    expect(kind(await provider.generate(request))).toBe('too_large');
+    // 64 KB limit / 16 KB chunks: it must give up after a handful of chunks, not read all 1000.
+    expect(pulled).toBeLessThan(10);
+  });
+
+  it('counts bytes, not characters, for multi-byte text', async () => {
+    const { readBodyLimited } = await import('./http');
+    const text = 'é'.repeat(40); // 40 characters, 80 bytes in UTF-8
+    expect(await readBodyLimited(new Response(text), 100)).toBe(text);
+    expect(await readBodyLimited(new Response(text), 60)).toBeNull();
+  });
+});

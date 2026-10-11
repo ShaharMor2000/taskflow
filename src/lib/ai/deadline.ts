@@ -2,14 +2,13 @@ import { addDays, diffInDays, isValidISODate, parseISODate, toISODate } from '..
 import { PLAN_LIMITS } from './limits';
 import type { DeadlineSource, PlanRequest } from './types';
 
-const WEEKDAYS: Record<string, number> = {
-  sunday: 0, sun: 0,
-  monday: 1, mon: 1,
-  tuesday: 2, tue: 2, tues: 2,
-  wednesday: 3, wed: 3,
-  thursday: 4, thu: 4, thur: 4, thurs: 4,
-  friday: 5, fri: 5,
-  saturday: 6, sat: 6,
+const FULL_WEEKDAYS: Record<string, number> = {
+  sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+};
+// Abbreviations double as ordinary words ("sun room", "I sat", "get wed"), so they only count
+// as weekdays after a preposition or "this"/"next" ("by sat", "due wed", "next fri").
+const SHORT_WEEKDAYS: Record<string, number> = {
+  sun: 0, mon: 1, tue: 2, tues: 2, wed: 3, thu: 4, thur: 4, thurs: 4, fri: 5, sat: 6,
 };
 
 const MONTHS: Record<string, number> = {
@@ -19,7 +18,8 @@ const MONTHS: Record<string, number> = {
 };
 
 const PREP = String.raw`(?:(?:by|on|before|until|due)\s+)?`;
-const WEEKDAY_RE = Object.keys(WEEKDAYS).sort((a, b) => b.length - a.length).join('|');
+const FULL_WEEKDAY_RE = Object.keys(FULL_WEEKDAYS).join('|');
+const SHORT_WEEKDAY_RE = Object.keys(SHORT_WEEKDAYS).sort((a, b) => b.length - a.length).join('|');
 const MONTH_RE = Object.keys(MONTHS).sort((a, b) => b.length - a.length).join('|');
 
 interface Matcher {
@@ -39,6 +39,16 @@ const upcomingMonthDay = (month: number, day: number, today: Date): Date | null 
   if (thisYear && diffInDays(thisYear, today) >= 0) return thisYear;
   return fromParts(today.getFullYear() + 1, month, day);
 };
+
+/**
+ * The next occurrence of a weekday strictly after today. "next <day>" means the one after that,
+ * except when today is that weekday, where the plain next occurrence is already a week away.
+ */
+function nextWeekday(target: number, qualifier: string | undefined, today: Date): Date {
+  const ahead = (target - today.getDay() + 7) % 7 || 7;
+  const extra = qualifier?.toLowerCase() === 'next' && ahead !== 7 ? 7 : 0;
+  return addDays(today, ahead + extra);
+}
 
 // Order matters: the first matcher that resolves wins.
 const MATCHERS: Matcher[] = [
@@ -60,12 +70,12 @@ const MATCHERS: Matcher[] = [
     resolve: (_m, today) => addDays(today, 7 - ((today.getDay() + 6) % 7)),
   },
   {
-    re: new RegExp(String.raw`${PREP}\b(?:(this|next)\s+)?(${WEEKDAY_RE})\b`, 'i'),
-    resolve: (m, today) => {
-      const target = WEEKDAYS[m[2].toLowerCase()];
-      const ahead = ((target - today.getDay() + 7) % 7) || 7;
-      return addDays(today, ahead + (m[1]?.toLowerCase() === 'next' ? 7 : 0));
-    },
+    re: new RegExp(String.raw`${PREP}\b(?:(this|next)\s+)?(${FULL_WEEKDAY_RE})\b`, 'i'),
+    resolve: (m, today) => nextWeekday(FULL_WEEKDAYS[m[2].toLowerCase()], m[1], today),
+  },
+  {
+    re: new RegExp(String.raw`\b(?:(?:by|on|before|until|due)\s+(?:(this|next)\s+)?|(this|next)\s+)(${SHORT_WEEKDAY_RE})\b\.?`, 'i'),
+    resolve: (m, today) => nextWeekday(SHORT_WEEKDAYS[m[3].toLowerCase()], m[1] ?? m[2], today),
   },
   {
     re: new RegExp(String.raw`${PREP}\b(${MONTH_RE})\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b`, 'i'),

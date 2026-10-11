@@ -15,9 +15,14 @@ describe('resolvePlannerConfig', () => {
     expect(resolvePlannerConfig({ VITE_PLANNER_ENDPOINT: '  /api/plan  ' })).toEqual({ endpoint: '/api/plan' });
   });
 
-  it('accepts an https URL', () => {
-    expect(resolvePlannerConfig({ VITE_PLANNER_ENDPOINT: 'https://example.com/api/plan' })).toEqual({
-      endpoint: 'https://example.com/api/plan',
+  it('rejects absolute URLs, even https (only same-origin paths are allowed)', () => {
+    expect(resolvePlannerConfig({ VITE_PLANNER_ENDPOINT: 'https://example.com/api/plan' })).toBeNull();
+    expect(resolvePlannerConfig({ VITE_PLANNER_ENDPOINT: 'https://api.vendor.example/v1/messages' })).toBeNull();
+  });
+
+  it('keeps accepting a same-origin path', () => {
+    expect(resolvePlannerConfig({ VITE_PLANNER_ENDPOINT: '/api/plan' })).toEqual({
+      endpoint: '/api/plan',
     });
   });
 

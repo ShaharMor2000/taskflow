@@ -3,6 +3,7 @@ import { addDays, diffInDays, isValidISODate, parseISODate, toISODate } from '..
 import { PRIORITIES, PRIORITY_META } from '../tasks';
 import { isDeadlineInRange } from './deadline';
 import { planError } from './errors';
+import { truncateText } from '../utils';
 import { PLAN_LIMITS } from './limits';
 import type { DeadlineSource, Plan, PlanRequest, PlanResult, PlanSource, PlanSuggestion, PlanWarning } from './types';
 
@@ -20,9 +21,13 @@ export function stripControl(text: string, keepNewlines = false): string {
 
 const oneLine = (text: string) => stripControl(text).replace(/\s+/g, ' ').trim();
 
-/** Case- and punctuation-insensitive key used to spot duplicate titles. */
+/**
+ * Case- and punctuation-insensitive key used to spot duplicate titles. Titles made only of
+ * symbols or emoji fall back to their normalized text so they are kept rather than dropped.
+ */
 export function titleKey(title: string): string {
-  return title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  const lettersAndNumbers = title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  return lettersAndNumbers || title.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 export type RequestValidation =
@@ -84,7 +89,7 @@ function cleanTitle(value: string): { text: string; truncated: boolean } {
   // Strip repeated markers like "1. - Title".
   for (let i = 0; i < 3 && LIST_MARKER.test(text); i++) text = text.replace(LIST_MARKER, '').trim();
   const truncated = text.length > PLAN_LIMITS.titleMax;
-  return { text: truncated ? text.slice(0, PLAN_LIMITS.titleMax).trim() : text, truncated };
+  return { text: truncated ? truncateText(text, PLAN_LIMITS.titleMax).trim() : text, truncated };
 }
 
 function cleanEstimate(value: unknown): { minutes: number; repaired: boolean } {
@@ -140,7 +145,7 @@ export function validatePlan(raw: unknown, ctx: ValidateContext): PlanResult {
 
     let description = typeof item.description === 'string' ? stripControl(item.description, true).trim() : '';
     if (description.length > PLAN_LIMITS.descriptionMax) {
-      description = description.slice(0, PLAN_LIMITS.descriptionMax).trim();
+      description = truncateText(description, PLAN_LIMITS.descriptionMax).trim();
       warnings.push({ code: 'text_truncated', index });
     }
 
@@ -176,7 +181,7 @@ export function validatePlan(raw: unknown, ctx: ValidateContext): PlanResult {
     if (Array.isArray(item.subtasks)) {
       for (const s of item.subtasks.slice(0, PLAN_LIMITS.scanItems)) {
         if (typeof s !== 'string') continue;
-        const text = cleanTitle(s).text.slice(0, PLAN_LIMITS.subtaskMax);
+        const text = truncateText(cleanTitle(s).text, PLAN_LIMITS.subtaskMax).trim();
         const k = titleKey(text);
         if (!text || !k || subKeys.has(k)) continue;
         if (subtasks.length >= PLAN_LIMITS.providerSubtasks) {

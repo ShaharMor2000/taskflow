@@ -1,5 +1,5 @@
 import type { TaskInput } from '../../types';
-import { uid } from '../utils';
+import { truncateText, uid } from '../utils';
 import { PLAN_LIMITS } from './limits';
 import type { PlanSource, PlanSuggestion } from './types';
 
@@ -23,11 +23,11 @@ export const AI_PLAN_TAG = 'ai-plan';
 
 /** Turns an approved suggestion into a regular task. */
 export function suggestionToTaskInput(s: PlanSuggestion, ctx: SuggestionContext): TaskInput {
-  const goal = ctx.goal.trim().replace(/\s+/g, ' ').slice(0, PLAN_LIMITS.goalInDescription);
+  const goal = truncateText(ctx.goal.trim().replace(/\s+/g, ' '), PLAN_LIMITS.goalInDescription);
   const footer = `Estimated time: ${formatEstimate(s.estimateMinutes)}\nPlanned with AI Planner (${ctx.source === 'demo' ? 'demo' : 'AI'}) from goal: "${goal}"`;
   const description = s.description.trim() ? `${s.description.trim()}\n\n${footer}` : footer;
   return {
-    title: s.title.trim().slice(0, PLAN_LIMITS.titleMax),
+    title: truncateText(s.title.trim(), PLAN_LIMITS.titleMax),
     description,
     status: 'todo',
     priority: s.priority,
@@ -37,7 +37,7 @@ export function suggestionToTaskInput(s: PlanSuggestion, ctx: SuggestionContext)
     category: null,
     tags: [AI_PLAN_TAG],
     subtasks: s.subtasks
-      .map((t) => t.trim().slice(0, PLAN_LIMITS.subtaskMax))
+      .map((t) => truncateText(t.trim(), PLAN_LIMITS.subtaskMax))
       .filter(Boolean)
       .map((title) => ({ id: uid('s_'), title, done: false })),
     notes: '',
