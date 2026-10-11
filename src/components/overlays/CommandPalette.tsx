@@ -5,7 +5,7 @@ import { CheckCircle2, Circle, CornerDownLeft, FolderPlus, Keyboard, Moon, Plus,
 import { useData } from '../../store/DataContext';
 import { useUI } from '../../store/UIContext';
 import { useLayer } from '../../hooks/useLayer';
-import { matchesSearch } from '../../lib/tasks';
+import { matchesSearch, searchScore } from '../../lib/tasks';
 import { formatDueLabel } from '../../lib/date';
 import { cn } from '../../lib/utils';
 import { NAV_ITEMS } from '../layout/Sidebar';
@@ -82,7 +82,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       { id: 'nav-settings', group: 'Navigation', label: 'Go to Settings', icon: Settings, hint: 'G S', run: () => navigate({ name: 'settings' }) },
     ] as Command[]).filter((c) => textMatch(c.label));
 
-    const matchedTasks = (q ? tasks.filter((t) => matchesSearch(t, q, projects)) : [...tasks].filter((t) => t.status !== 'done').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))
+    const matchedTasks = (q ? tasks.filter((t) => matchesSearch(t, q, projects)).sort((a, b) => searchScore(b, q) - searchScore(a, q)) : [...tasks].filter((t) => t.status !== 'done').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)))
       .slice(0, q ? 8 : 5)
       .map<Command>((t) => ({
         id: `task-${t.id}`,

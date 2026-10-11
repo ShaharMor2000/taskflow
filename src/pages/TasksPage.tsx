@@ -12,6 +12,7 @@ import { TaskRow } from '../components/tasks/TaskRow';
 import { BulkActionBar } from '../components/tasks/BulkActionBar';
 import { SelectAllBar } from '../components/tasks/SelectAllBar';
 import { EmptyState } from '../components/ui/EmptyState';
+import { useListKeyboard } from '../hooks/useListKeyboard';
 
 const GROUP_ORDER: DueGroup[] = ['overdue', 'today', 'tomorrow', 'week', 'later', 'none'];
 
@@ -19,6 +20,7 @@ export function TasksPage() {
   const { tasks, projects } = useData();
   const { filters, sort, now, openTaskForm, resetFilters } = useUI();
   const [showCompleted, setShowCompleted] = useState(false);
+  useListKeyboard();
 
   const filtered = useMemo(() => sortTasks(filterTasks(tasks, filters, now, projects), sort), [tasks, filters, sort, now, projects]);
   const open = filtered.filter((t) => t.status !== 'done');
@@ -94,7 +96,7 @@ export function TasksPage() {
                   <div className="divide-y divide-slate-100/80 dark:divide-white/[0.04]">
                     <AnimatePresence initial={false} mode="popLayout">
                       {group.tasks.map((t) => (
-                        <TaskRow key={t.id} task={t} project={projectOf(t)} selectable />
+                        <TaskRow key={t.id} task={t} project={projectOf(t)} selectable highlightSearch />
                       ))}
                     </AnimatePresence>
                   </div>
@@ -127,7 +129,7 @@ export function TasksPage() {
                       <div className="divide-y divide-slate-100/80 dark:divide-white/[0.04]">
                         <AnimatePresence initial={false} mode="popLayout">
                           {done.map((t) => (
-                            <TaskRow key={t.id} task={t} project={projectOf(t)} selectable />
+                            <TaskRow key={t.id} task={t} project={projectOf(t)} selectable highlightSearch />
                           ))}
                         </AnimatePresence>
                       </div>

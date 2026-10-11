@@ -15,6 +15,7 @@ import { ProgressRing } from '../components/ui/Progress';
 import { Segmented } from '../components/ui/Controls';
 import { StatCard } from '../components/ui/StatCard';
 import { useTaskActions } from '../hooks/useTaskActions';
+import { useListKeyboard } from '../hooks/useListKeyboard';
 
 type Tab = 'open' | 'done' | 'all';
 
@@ -23,6 +24,7 @@ export function ProjectDetailPage({ id }: { id: string }) {
   const { now, navigate, openProjectForm, openTaskForm } = useUI();
   const { requestDeleteProject } = useTaskActions();
   const [tab, setTab] = useState<Tab>('open');
+  useListKeyboard();
   const project = projects.find((p) => p.id === id);
 
   const projectTasks = useMemo(
