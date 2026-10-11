@@ -1,4 +1,4 @@
-import { forwardRef, memo, useCallback, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { forwardRef, memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CalendarDays, ChevronLeft, ChevronRight, GripVertical, ListChecks, NotebookPen, Plus, Repeat } from 'lucide-react';
@@ -23,6 +23,14 @@ export function BoardPage() {
   const now = useClock();
   const actions = useTaskActions();
   const [announcement, setAnnouncement] = useState('');
+  const pendingFocus = useRef<string | null>(null);
+
+  // Keep keyboard focus on a card after it moves to a new place.
+  useLayoutEffect(() => {
+    if (!pendingFocus.current) return;
+    document.querySelector<HTMLElement>(`[data-card-id="${pendingFocus.current}"]`)?.focus();
+    pendingFocus.current = null;
+  });
 
   // Columns are statuses, so the status filter doesn't apply; cards follow their manual order.
   const columns = useMemo(() => {
@@ -61,8 +69,7 @@ export function BoardPage() {
       actions.moveToColumn(task, task.status, col[index + 2]?.id ?? null);
       setAnnouncement(`${task.title} moved down`);
     } else return;
-    // Keep focus on the card after it re-renders in its new place.
-    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-card-id="${task.id}"]`)?.focus());
+    pendingFocus.current = task.id;
   };
   latest.current = { drop, onCardKey };
 

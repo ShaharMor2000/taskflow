@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --hour-line: rgb(241 245 249);
+  }
+  .dark {
+    --hour-line: rgba(255, 255, 255, 0.05);
+  }
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
