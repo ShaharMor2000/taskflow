@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Task } from '../types';
-import { DEFAULT_FILTERS, filterTasks, matchesSearch, sanitizeFilters, searchScore, sortTasks } from './tasks';
+import { DEFAULT_FILTERS, batchTopOrders, filterTasks, matchesSearch, sanitizeFilters, searchScore, sortTasks } from './tasks';
 
 const now = new Date(2026, 9, 11, 12, 0); // Oct 11 2026, noon
 let n = 0;
@@ -93,5 +93,28 @@ describe('sanitizeFilters', () => {
       tag: 'x',
     });
     expect(sanitizeFilters(null)).toEqual(DEFAULT_FILTERS);
+  });
+});
+
+describe('batchTopOrders', () => {
+  const existing = [
+    { status: 'todo' as const, order: 1024 },
+    { status: 'todo' as const, order: 2048 },
+    { status: 'done' as const, order: 5000 },
+  ];
+
+  it('puts the batch above the column, first input on top, in input order', () => {
+    const orders = batchTopOrders(existing, ['todo', 'todo', 'todo'], 1024);
+    expect(orders).toEqual([-2048, -1024, 0]);
+    expect(Math.max(...orders)).toBeLessThan(1024);
+  });
+
+  it('handles several columns independently', () => {
+    expect(batchTopOrders(existing, ['todo', 'in_progress', 'todo', 'in_progress'], 1024)).toEqual([-1024, 0, 0, 1024]);
+  });
+
+  it('works for an empty column and an empty batch', () => {
+    expect(batchTopOrders([], ['todo', 'todo'], 1024)).toEqual([0, 1024]);
+    expect(batchTopOrders(existing, [], 1024)).toEqual([]);
   });
 });

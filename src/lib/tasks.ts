@@ -265,3 +265,23 @@ export function dueGroup(task: Task, now: Date): DueGroup {
   if (diff <= 7) return 'week';
   return 'later';
 }
+
+/**
+ * Board positions for a batch of new tasks: the first task of each status goes to the top of
+ * its column and the rest follow in input order, all above the existing tasks.
+ */
+export function batchTopOrders(existing: Pick<Task, 'status' | 'order'>[], statuses: TaskStatus[], step: number): number[] {
+  const counts = new Map<TaskStatus, number>();
+  for (const s of statuses) counts.set(s, (counts.get(s) ?? 0) + 1);
+  const next = new Map<TaskStatus, number>();
+  for (const [status, count] of counts) {
+    const orders = existing.filter((t) => t.status === status).map((t) => t.order);
+    const top = orders.length ? Math.min(...orders) - step : step;
+    next.set(status, top - (count - 1) * step);
+  }
+  return statuses.map((s) => {
+    const order = next.get(s)!;
+    next.set(s, order + step);
+    return order;
+  });
+}

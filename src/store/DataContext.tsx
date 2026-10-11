@@ -13,7 +13,7 @@ import type {
 } from '../types';
 import { createEmptyData, createSampleData } from '../lib/sampleData';
 import { ORDER_STEP, loadData, saveData } from '../lib/storage';
-import { STATUS_META } from '../lib/tasks';
+import { STATUS_META, batchTopOrders } from '../lib/tasks';
 import { nextOccurrence } from '../lib/recurrence';
 import { formatShortDate, parseISODate } from '../lib/date';
 import { uid } from '../lib/utils';
@@ -96,6 +96,11 @@ export interface DataActions {
   /** Latest state without subscribing to changes (for event handlers). */
   getState: () => AppData;
   createTask: (input: TaskInput) => Task;
+  /**
+   * Creates several tasks at once with one activity entry. The first input lands at the top of
+   * its column and the rest follow in input order.
+   */
+  createTasks: (inputs: TaskInput[], activityMessage: string) => Task[];
   /**
    * Returns the next occurrence when completing a recurring task. When a recurring task
    * is completed and nothing is returned, its series has reached its end date.
@@ -187,6 +192,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'task/add', task });
       log('task_created', `Created “${task.title}”`, { taskId: task.id });
       return task;
+    },
+    [log],
+  );
+
+  const createTasks = useCallback(
+    (inputs: TaskInput[], activityMessage: string): Task[] => {
+      if (!inputs.length) return [];
+      const now = new Date().toISOString();
+      // stateRef only refreshes on render, so compute every position here instead of
+      // calling createTask repeatedly (which would give all of them the same order).
+      const orders = batchTopOrders(stateRef.current.tasks, inputs.map((i) => i.status), ORDER_STEP);
+      const created = inputs.map(
+        (input, i): Task => ({
+          ...input,
+          id: uid('t_'),
+          order: orders[i],
+          createdAt: now,
+          updatedAt: now,
+          completedAt: input.status === 'done' ? now : null,
+        }),
+      );
+      // task/add prepends, so add in reverse to keep the input order in the task list too.
+      for (let i = created.length - 1; i >= 0; i--) dispatch({ type: 'task/add', task: created[i] });
+      log('task_created', activityMessage);
+      return created;
     },
     [log],
   );
@@ -411,6 +441,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     () => ({
       getState: () => stateRef.current,
       createTask,
+      createTasks,
       updateTask,
       moveTask,
       setStatus,
@@ -440,7 +471,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       clearAllData: () => dispatch({ type: 'data/replace', data: createEmptyData(stateRef.current.settings) }),
     }),
     // Every callback above is stable, so this object keeps its identity for the app's lifetime.
-    [createTask, updateTask, moveTask, setStatus, toggleComplete, updateNotes, discardTask, bulkUpdate, bulkDelete, restoreTasks, deleteTask, restoreTask, duplicateTask, toggleSubtask, addSubtask, removeSubtask, createProject, updateProject, deleteProject, addNotifications],
+    [createTask, createTasks, updateTask, moveTask, setStatus, toggleComplete, updateNotes, discardTask, bulkUpdate, bulkDelete, restoreTasks, deleteTask, restoreTask, duplicateTask, toggleSubtask, addSubtask, removeSubtask, createProject, updateProject, deleteProject, addNotifications],
   );
 
   const dataState = useMemo<DataState>(() => ({ ...state, storageError }), [state, storageError]);
