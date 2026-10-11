@@ -19,6 +19,7 @@ const named = <K extends string>(load: () => Promise<Record<K, ComponentType<any
   lazy(() => load().then((m) => ({ default: m[key] })));
 const DashboardPage = named(() => import('./pages/DashboardPage'), 'DashboardPage');
 const TasksPage = named(() => import('./pages/TasksPage'), 'TasksPage');
+const PlannerPage = named(() => import('./pages/PlannerPage'), 'PlannerPage');
 const BoardPage = named(() => import('./pages/BoardPage'), 'BoardPage');
 const CalendarPage = named(() => import('./pages/CalendarPage'), 'CalendarPage');
 const ProjectsPage = named(() => import('./pages/ProjectsPage'), 'ProjectsPage');
@@ -33,6 +34,8 @@ function CurrentPage() {
       return <DashboardPage />;
     case 'tasks':
       return <TasksPage />;
+    case 'planner':
+      return <PlannerPage />;
     case 'board':
       return <BoardPage />;
     case 'calendar':

@@ -10,6 +10,7 @@ const SHORTCUTS: { keys: string[]; label: string }[] = [
   { keys: ['['], label: 'Collapse or expand sidebar' },
   { keys: ['G', 'D'], label: 'Go to Dashboard' },
   { keys: ['G', 'T'], label: 'Go to My Tasks' },
+  { keys: ['G', 'I'], label: 'Go to AI Planner' },
   { keys: ['G', 'B'], label: 'Go to Board' },
   { keys: ['G', 'C'], label: 'Go to Calendar' },
   { keys: ['G', 'P'], label: 'Go to Projects' },

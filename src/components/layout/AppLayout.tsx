@@ -68,7 +68,8 @@ export function AppLayout({ children, pageKey }: { children: ReactNode; pageKey:
         </main>
       </div>
 
-      {selectedIds.length === 0 && (
+      {/* The planner's save bar sits at the bottom on phones, so the quick-add button stays out of its way. */}
+      {selectedIds.length === 0 && route.name !== 'planner' && (
       <button
         onClick={() => openTaskForm(route.name === 'project' ? { defaults: { projectId: route.id } } : undefined)}
         className="fixed bottom-5 right-5 z-20 grid h-14 w-14 place-items-center rounded-2xl bg-violet-600 text-white shadow-glow transition active:scale-95 sm:hidden"

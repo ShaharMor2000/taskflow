@@ -53,6 +53,7 @@ export function useDeadlineNotifications() {
 const GO_TO: Record<string, Route> = {
   d: { name: 'dashboard' },
   t: { name: 'tasks' },
+  i: { name: 'planner' },
   b: { name: 'board' },
   c: { name: 'calendar' },
   p: { name: 'projects' },

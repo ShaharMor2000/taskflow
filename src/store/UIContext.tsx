@@ -7,6 +7,7 @@ import { useDataState } from './DataContext';
 export type Route =
   | { name: 'dashboard' }
   | { name: 'tasks' }
+  | { name: 'planner' }
   | { name: 'board' }
   | { name: 'calendar' }
   | { name: 'projects' }
@@ -14,7 +15,7 @@ export type Route =
   | { name: 'analytics' }
   | { name: 'settings' };
 
-const SIMPLE_ROUTES = ['dashboard', 'tasks', 'board', 'calendar', 'projects', 'analytics', 'settings'] as const;
+const SIMPLE_ROUTES = ['dashboard', 'tasks', 'planner', 'board', 'calendar', 'projects', 'analytics', 'settings'] as const;
 
 function parseHash(hash: string): Route {
   const [name, id] = hash.replace(/^#\/?/, '').split('/');

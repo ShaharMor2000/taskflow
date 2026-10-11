@@ -12,6 +12,7 @@ import {
   Plus,
   Search,
   Settings as SettingsIcon,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react';
 import { useDataState } from '../../store/DataContext';
@@ -30,6 +31,7 @@ interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { name: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, shortcut: 'G D' },
   { name: 'tasks', label: 'My Tasks', icon: ListTodo, shortcut: 'G T' },
+  { name: 'planner', label: 'AI Planner', icon: Sparkles, shortcut: 'G I' },
   { name: 'board', label: 'Board', icon: Columns3, shortcut: 'G B' },
   { name: 'calendar', label: 'Calendar', icon: CalendarDays, shortcut: 'G C' },
   { name: 'projects', label: 'Projects', icon: FolderKanban, shortcut: 'G P' },
