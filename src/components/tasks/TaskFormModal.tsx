@@ -36,6 +36,10 @@ export function TaskFormModal() {
   const { taskForm, closeTaskForm } = useUI();
   const { tasks, projects, createTask, updateTask } = useData();
   const toast = useToast();
+  // Keep the last session's key while the dialog animates out, so the form doesn't flash empty.
+  const sessionRef = useRef(0);
+  if (taskForm.open) sessionRef.current = taskForm.session;
+  const session = sessionRef.current;
 
   const editing = taskForm.open && taskForm.taskId ? tasks.find((t) => t.id === taskForm.taskId) : undefined;
   const initial: TaskInput = editing
@@ -88,7 +92,7 @@ export function TaskFormModal() {
       }
     >
       <TaskForm
-        key={editing?.id ?? 'new'}
+        key={session}
         initial={initial}
         projects={projects}
         categories={getCategories(tasks)}

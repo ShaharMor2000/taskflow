@@ -26,8 +26,10 @@ export function routeToHash(route: Route): string {
   return route.name === 'project' ? `#/projects/${encodeURIComponent(route.id)}` : `#/${route.name}`;
 }
 
-type TaskFormState = { open: false } | { open: true; taskId?: string; defaults?: Partial<TaskInput> };
-type ProjectFormState = { open: false } | { open: true; projectId?: string };
+/** `session` changes on every open so a dialog reopened mid-close never reuses stale form state. */
+type TaskFormState = { open: false } | { open: true; session: number; taskId?: string; defaults?: Partial<TaskInput> };
+type ProjectFormState = { open: false } | { open: true; session: number; projectId?: string };
+let formSession = 0;
 
 export interface UIState {
   route: Route;
@@ -186,11 +188,11 @@ export function UIProvider({ children }: { children: ReactNode }) {
       setFilters: (patch) => setFiltersState((f) => ({ ...f, ...patch })),
       resetFilters: () => setFiltersState(DEFAULT_FILTERS),
       setSort,
-      openTaskForm: (opts = {}) => setTaskForm({ open: true, ...opts }),
+      openTaskForm: (opts = {}) => setTaskForm({ open: true, session: ++formSession, ...opts }),
       closeTaskForm: () => setTaskForm({ open: false }),
       openTaskDetail: setDetailTaskId,
       closeTaskDetail: () => setDetailTaskId(null),
-      openProjectForm: (projectId) => setProjectForm({ open: true, projectId }),
+      openProjectForm: (projectId) => setProjectForm({ open: true, session: ++formSession, projectId }),
       closeProjectForm: () => setProjectForm({ open: false }),
       setPaletteOpen,
       setShortcutsOpen,

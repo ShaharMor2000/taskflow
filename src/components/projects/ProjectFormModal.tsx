@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Check } from 'lucide-react';
 import type { ProjectInput } from '../../types';
 import { PROJECT_COLORS } from '../../lib/tasks';
@@ -14,6 +14,9 @@ export function ProjectFormModal() {
   const { projectForm, closeProjectForm, navigate } = useUI();
   const { projects, createProject, updateProject } = useData();
   const toast = useToast();
+  const sessionRef = useRef(0);
+  if (projectForm.open) sessionRef.current = projectForm.session;
+  const session = sessionRef.current;
   const editing = projectForm.open && projectForm.projectId ? projects.find((p) => p.id === projectForm.projectId) : undefined;
 
   const submit = (input: ProjectInput) => {
@@ -46,7 +49,7 @@ export function ProjectFormModal() {
       }
     >
       <ProjectForm
-        key={editing?.id ?? 'new'}
+        key={session}
         initial={editing ?? { name: '', description: '', color: PROJECT_COLORS[projects.length % PROJECT_COLORS.length] }}
         existingNames={projects.filter((p) => p.id !== editing?.id).map((p) => p.name.toLowerCase())}
         onSubmit={submit}
